@@ -20,15 +20,19 @@
 <h2>Issues</h2>
 
 <ol>
-  <li>It is possible to copy a footnote into the footnote editor. Why? The schema
-    shouldn't allow that.</li>
-  <li>It is possible to destroy the containers that hold the footnotes in the
-    footnote editor. It would be good if these could be locked.</li>
-  <li>If copying a piece of a text which includes a footnote, and then inserting
+  <li><p>It is possible to copy a footnote into the footnote editor. Why? The schema
+    shouldn't allow that.</p></li>
+  <li><p>It is possible to destroy the containers that hold the footnotes in the
+    footnote editor. It would be good if these could be locked.</p></li>
+  <li><p>If copying a piece of a text which includes a footnote, and then inserting
     that text somewhere later in the document, the footnote appears a second time
     (that's good). But if editing the second footnote, the first is changed.
     This must be because the same footnote Node object is in the document twice
-    after editing. Is this how it should be?</li>
+    after editing. Is this how it should be?</p>
+    <p><strong>Edit:</strong>
+    <a href="https://github.com/fiduswriter/prosemirror-footnotes/commit/ffad5bfc161eb4e8acc33129558b41a27fa53b27">Solved</a>
+     temporarily by counting the number of instances the same footnote is mentioned
+     previously. Not exactly elegant.</li>
 </ol>
 
 <script src="footnote-pm-bundle.js"></script>
