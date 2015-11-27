@@ -15,6 +15,22 @@
 <div id="footnote-editor">
 </div>
 
+<p>This is a test of <a href="http://www.prosemirror.net">ProseMirror</a> used for footnotes. Check the source code behind this demo <a href="https://github.com/fiduswriter/prosemirror-footnotes">here</a>.</p>
+
+<h2>Issues</h2>
+
+<ol>
+  <li>It is possible to copy a footnote into the footnote editor. Why? The schema
+    shouldn't allow that.</li>
+  <li>It is possible to destroy the containers that hold the footnotes in the
+    footnote editor. It would be good if these could be locked.</li>
+  <li>If copying a piece of a text which includes a footnote, and then inserting
+    that text somewhere later in the document, the footnote appears a second time
+    (that's good). But if editing the second footnote, the first is changed.
+    This must be because the same footnote Node object is in the document twice
+    after editing. Is this how it should be?</li>
+</ol>
+
 <script src="footnote-pm-bundle.js"></script>
 
 </body>
