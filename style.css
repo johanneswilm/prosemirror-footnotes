@@ -1,0 +1,19 @@
+.ProseMirror, body, #footnotes {
+  counter-reset: footnote-counter;
+}
+.footnote::before {
+  counter-increment: footnote-counter;
+  content: counter(footnote-counter);
+}
+div.footnote-container p:first-child::before {
+  counter-increment: footnote-counter;
+  content: counter(footnote-counter) '. ';
+}
+
+.footnote {
+  font-size: 75%;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+  top: -0.5em;
+}
