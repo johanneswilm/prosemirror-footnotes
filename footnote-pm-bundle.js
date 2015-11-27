@@ -100,7 +100,6 @@ FootnoteContainer.register("parseDOM", {
 });
 
 FootnoteContainer.prototype.serializeDOM = function (node, options) {
-  //let dom = elt("div", {class: 'footnote-container'})
   var dom = (0, _prosemirrorSrcSerializeDom.wrap)(node, options, "div");
   dom.setAttribute("class", 'footnote-container');
   return dom;
@@ -143,16 +142,21 @@ var where = document.getElementById('editor'),
   return footnotes;
 },
     getNodePos = function getNodePos(currentNode, searchedNode) {
-  var path = arguments.length <= 2 || arguments[2] === undefined ? [] : arguments[2];
-  var fromOffset = arguments.length <= 3 || arguments[3] === undefined ? 0 : arguments[3];
-  var toOffset = arguments.length <= 4 || arguments[4] === undefined ? 0 : arguments[4];
+  var searchedNumber = arguments.length <= 2 || arguments[2] === undefined ? 0 : arguments[2];
+  var path = arguments.length <= 3 || arguments[3] === undefined ? [] : arguments[3];
+  var fromOffset = arguments.length <= 4 || arguments[4] === undefined ? 0 : arguments[4];
+  var toOffset = arguments.length <= 5 || arguments[5] === undefined ? 0 : arguments[5];
+  var counter = arguments.length <= 6 || arguments[6] === undefined ? { hits: 0 } : arguments[6];
 
   var index, childPos, childNode, childOffset;
   if (currentNode === searchedNode) {
-    return {
-      from: new pm.Pos(path, fromOffset),
-      to: new pm.Pos(path, toOffset)
-    };
+    if (searchedNumber === counter.hits) {
+      return {
+        from: new pm.Pos(path, fromOffset),
+        to: new pm.Pos(path, toOffset)
+      };
+    }
+    counter.hits++;
   }
   if (currentNode.content) {
     for (index = 0; index < currentNode.content.length; index++) {
@@ -160,9 +164,9 @@ var where = document.getElementById('editor'),
       if (childNode.isInline) {
         fromOffset = toOffset;
         toOffset = toOffset + childNode.offset;
-        childPos = getNodePos(childNode, searchedNode, path, fromOffset, toOffset);
+        childPos = getNodePos(childNode, searchedNode, searchedNumber, path, fromOffset, toOffset, counter);
       } else {
-        childPos = getNodePos(childNode, searchedNode, path.concat(index), fromOffset, toOffset);
+        childPos = getNodePos(childNode, searchedNode, searchedNumber, path.concat(index), fromOffset, toOffset, counter);
       }
       if (childPos !== false) {
         return childPos;
@@ -202,7 +206,18 @@ var where = document.getElementById('editor'),
       var oldFootnote = lastFootnotes[index];
       console.log('detected change:' + footnote.innerHTML);
       var replacement = oldFootnote.type.create({ fnContents: footnote.innerHTML }, null, footnote.styles);
-      var nodePos = getNodePos(editor.doc, oldFootnote);
+      // The editor.doc may sometimes contian the same node several times.
+      // This happens after copying, for example. We therefore need to check
+      // how many times the same footnote node shows up before the current
+      // footnote.
+      var previousInstances = 0,
+          i = undefined;
+      for (i = 0; i < index; i++) {
+        if (lastFootnotes[i] === lastFootnotes[index]) {
+          previousInstances++;
+        }
+      }
+      var nodePos = getNodePos(editor.doc, oldFootnote, previousInstances);
       lastFootnotes[index] = replacement;
       editor.tr.replaceWith(nodePos.from, nodePos.to, replacement).apply();
     }

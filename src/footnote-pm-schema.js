@@ -57,7 +57,6 @@ FootnoteContainer.register("parseDOM", {
 })
 
 FootnoteContainer.prototype.serializeDOM = (node, options) => {
-  //let dom = elt("div", {class: 'footnote-container'})
   let dom = wrap(node, options, "div")
   dom.setAttribute("class", 'footnote-container')
   return dom

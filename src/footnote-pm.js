@@ -25,13 +25,16 @@ var where = document.getElementById('editor'),
     }
     return footnotes;
   },
-  getNodePos = (currentNode, searchedNode, path = [], fromOffset = 0, toOffset = 0) => {
+  getNodePos = (currentNode, searchedNode, searchedNumber = 0, path = [], fromOffset = 0, toOffset = 0, counter = {hits: 0}) => {
       var index, childPos, childNode, childOffset;
       if (currentNode===searchedNode) {
-          return {
-            from: new pm.Pos(path, fromOffset),
-            to: new pm.Pos(path, toOffset)
+          if (searchedNumber === counter.hits) {
+              return {
+                  from: new pm.Pos(path, fromOffset),
+                  to: new pm.Pos(path, toOffset)
+              }
           }
+          counter.hits++;
       }
       if (currentNode.content) {
           for (index=0;index<currentNode.content.length;index++) {
@@ -39,9 +42,9 @@ var where = document.getElementById('editor'),
               if (childNode.isInline) {
                   fromOffset = toOffset;
                   toOffset = toOffset + childNode.offset;
-                  childPos = getNodePos(childNode, searchedNode, path, fromOffset, toOffset);
+                  childPos = getNodePos(childNode, searchedNode, searchedNumber, path, fromOffset, toOffset, counter);
               } else {
-                  childPos = getNodePos(childNode, searchedNode, path.concat(index), fromOffset, toOffset);
+                  childPos = getNodePos(childNode, searchedNode, searchedNumber, path.concat(index), fromOffset, toOffset, counter);
               }
               if (childPos !== false) {
                   return childPos;
@@ -80,7 +83,17 @@ var where = document.getElementById('editor'),
           let oldFootnote = lastFootnotes[index];
           console.log('detected change:' + footnote.innerHTML);
           let replacement = oldFootnote.type.create({fnContents: footnote.innerHTML}, null, footnote.styles);
-          let nodePos = getNodePos(editor.doc,oldFootnote);
+          // The editor.doc may sometimes contian the same node several times.
+          // This happens after copying, for example. We therefore need to check
+          // how many times the same footnote node shows up before the current
+          // footnote.
+          let previousInstances = 0, i;
+          for(i=0;i<index;i++) {
+            if (lastFootnotes[i]===lastFootnotes[index]) {
+              previousInstances++;
+            }
+          }
+          let nodePos = getNodePos(editor.doc, oldFootnote, previousInstances);
           lastFootnotes[index] = replacement;
           editor.tr.replaceWith(nodePos.from,nodePos.to,replacement).apply();
         }
