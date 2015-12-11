@@ -99,9 +99,11 @@ FootnoteContainer.register("parseDOM", {
   }
 });
 
-FootnoteContainer.prototype.serializeDOM = function (node, options) {
-  var dom = (0, _prosemirrorSrcSerializeDom.wrap)(node, options, "div");
-  dom.setAttribute("class", 'footnote-container');
+FootnoteContainer.prototype.serializeDOM = function (node, serializer, third, fourth) {
+  var dom = serializer.elt("div", {
+    "class": 'footnote-container'
+  });
+  serializer.renderContent(node, dom);
   return dom;
 };
 
@@ -110,18 +112,18 @@ exports.fidusSchema = fidusSchema;
 var fidusFnSchema = new _prosemirrorSrcModel.Schema(_prosemirrorSrcModel.defaultSchema.spec.updateNodes({ footnotecontainer: FootnoteContainer }));
 exports.fidusFnSchema = fidusFnSchema;
 
-},{"../../prosemirror/src/dom":3,"../../prosemirror/src/model":26,"../../prosemirror/src/serialize/dom":35}],2:[function(require,module,exports){
+},{"../../prosemirror/src/dom":3,"../../prosemirror/src/model":27,"../../prosemirror/src/serialize/dom":35}],2:[function(require,module,exports){
 "use strict";
 
 window.pm = {
-  ProseMirror: require("../../prosemirror/src/edit/main").ProseMirror,
-  Pos: require("../../prosemirror/src/model").Pos,
-  Node: require("../../prosemirror/src/model").Node,
-  fromDOM: require("../../prosemirror/src/parse/dom").fromDOM,
-  fromHTML: require("../../prosemirror/src/parse/dom").fromHTML,
-  fidusSchema: require("./footnote-pm-schema").fidusSchema,
-  fidusFnSchema: require("./footnote-pm-schema").fidusFnSchema,
-  MenuBar: require("../../prosemirror/src/menu/menubar").MenuBar
+    ProseMirror: require("../../prosemirror/src/edit/main").ProseMirror,
+    Pos: require("../../prosemirror/src/model").Pos,
+    Node: require("../../prosemirror/src/model").Node,
+    fromDOM: require("../../prosemirror/src/parse/dom").fromDOM,
+    fromHTML: require("../../prosemirror/src/parse/dom").fromHTML,
+    fidusSchema: require("./footnote-pm-schema").fidusSchema,
+    fidusFnSchema: require("./footnote-pm-schema").fidusFnSchema,
+    MenuBar: require("../../prosemirror/src/menu/menubar").MenuBar
 };
 
 var where = document.getElementById('editor'),
@@ -130,106 +132,113 @@ var where = document.getElementById('editor'),
     fnEditor,
     lastFootnotes = [],
     findFootnotes = function findFootnotes(node) {
-  var footnotes = [];
-  if (node.type.name === 'footnote') {
-    footnotes.push(node);
-  }
-  if (node.content) {
-    node.content.forEach(function (node) {
-      footnotes = footnotes.concat(findFootnotes(node));
-    });
-  }
-  return footnotes;
+    var footnotes = [];
+    if (node.type.name === 'footnote') {
+        footnotes.push(node);
+    }
+    if (node.content && node.content.content) {
+        node.content.content.forEach(function (node) {
+            footnotes = footnotes.concat(findFootnotes(node));
+        });
+    }
+    return footnotes;
 },
     getNodePos = function getNodePos(currentNode, searchedNode) {
-  var searchedNumber = arguments.length <= 2 || arguments[2] === undefined ? 0 : arguments[2];
-  var path = arguments.length <= 3 || arguments[3] === undefined ? [] : arguments[3];
-  var fromOffset = arguments.length <= 4 || arguments[4] === undefined ? 0 : arguments[4];
-  var toOffset = arguments.length <= 5 || arguments[5] === undefined ? 0 : arguments[5];
-  var counter = arguments.length <= 6 || arguments[6] === undefined ? { hits: 0 } : arguments[6];
+    var searchedNumber = arguments.length <= 2 || arguments[2] === undefined ? 0 : arguments[2];
+    var path = arguments.length <= 3 || arguments[3] === undefined ? [] : arguments[3];
+    var fromOffset = arguments.length <= 4 || arguments[4] === undefined ? 0 : arguments[4];
+    var toOffset = arguments.length <= 5 || arguments[5] === undefined ? 0 : arguments[5];
+    var counter = arguments.length <= 6 || arguments[6] === undefined ? {
+        hits: 0
+    } : arguments[6];
 
-  var index, childPos, childNode, childOffset;
-  if (currentNode === searchedNode) {
-    if (searchedNumber === counter.hits) {
-      return {
-        from: new pm.Pos(path, fromOffset),
-        to: new pm.Pos(path, toOffset)
-      };
+    var index = 0,
+        foundPos = false;
+
+    if (currentNode === searchedNode) {
+        if (searchedNumber === counter.hits) {
+            return {
+                from: new pm.Pos(path, fromOffset),
+                to: new pm.Pos(path, toOffset)
+            };
+        }
+        counter.hits++;
     }
-    counter.hits++;
-  }
-  if (currentNode.content) {
-    for (index = 0; index < currentNode.content.length; index++) {
-      childNode = currentNode.content[index];
-      if (childNode.isInline) {
-        fromOffset = toOffset;
-        toOffset = toOffset + childNode.offset;
-        childPos = getNodePos(childNode, searchedNode, searchedNumber, path, fromOffset, toOffset, counter);
-      } else {
-        childPos = getNodePos(childNode, searchedNode, searchedNumber, path.concat(index), fromOffset, toOffset, counter);
-      }
-      if (childPos !== false) {
-        return childPos;
-      }
+    currentNode.forEach(function (childNode, fromOffset, toOffset) {
+        var childPos;
+        if (childNode.isInline) {
+            childPos = getNodePos(childNode, searchedNode, searchedNumber, path, fromOffset, toOffset, counter);
+        } else {
+            childPos = getNodePos(childNode, searchedNode, searchedNumber, path.concat(index), fromOffset, toOffset, counter);
+        }
+        if (childPos !== false) {
+            foundPos = childPos;
+        }
+        index++;
+    });
+    if (foundPos !== false) {
+        return foundPos;
     }
-  }
-  return false;
+    return false;
 },
     sameArrayContents = function sameArrayContents(arrayOne, arrayTwo) {
-  if (arrayOne.length != arrayTwo.length) {
-    return false;
-  }
-  return arrayOne.every(function (element, index) {
-    return element === arrayTwo[index];
-  });
+    if (arrayOne.length != arrayTwo.length) {
+        return false;
+    }
+    return arrayOne.every(function (element, index) {
+        return element === arrayTwo[index];
+    });
 },
     renderFootnotes = function renderFootnotes() {
-  var currentFootnotes = findFootnotes(editor.doc),
-      footnotesHTML = '';
-  if (sameArrayContents(currentFootnotes, lastFootnotes)) {
-    return true;
-  }
-  console.log('redrawing footnotes');
-  currentFootnotes.forEach(function (footnote) {
-    footnotesHTML += "<div class='footnote-container'>" + footnote.attrs.fnContents + "</div>";
-  });
-  fnEditor.setContent(pm.fromHTML(pm.fidusFnSchema, footnotesHTML));
+    var currentFootnotes = findFootnotes(editor.doc),
+        footnotesHTML = '';
+    if (sameArrayContents(currentFootnotes, lastFootnotes)) {
+        return true;
+    }
+    console.log('redrawing footnotes');
+    currentFootnotes.forEach(function (footnote) {
+        footnotesHTML += "<div class='footnote-container'>" + footnote.attrs.fnContents + "</div>";
+    });
+    fnEditor.setContent(pm.fromHTML(pm.fidusFnSchema, footnotesHTML));
 
-  lastFootnotes = currentFootnotes;
+    lastFootnotes = currentFootnotes;
 },
     updateFootnotes = function updateFootnotes() {
-  var currentFootnotesElement = fnEditor.getContent('dom'),
-      footnotes = undefined;
-  footnotes = [].slice.call(currentFootnotesElement.querySelectorAll('.footnote-container'));
-  footnotes.forEach(function (footnote, index) {
-    if (footnote.innerHTML != lastFootnotes[index].attrs.fnContents) {
-      var oldFootnote = lastFootnotes[index];
-      console.log('detected change:' + footnote.innerHTML);
-      var replacement = oldFootnote.type.create({ fnContents: footnote.innerHTML }, null, footnote.styles);
-      // The editor.doc may sometimes contian the same node several times.
-      // This happens after copying, for example. We therefore need to check
-      // how many times the same footnote node shows up before the current
-      // footnote.
-      var previousInstances = 0,
-          i = undefined;
-      for (i = 0; i < index; i++) {
-        if (lastFootnotes[i] === lastFootnotes[index]) {
-          previousInstances++;
+    var currentFootnotesElement = fnEditor.getContent('dom'),
+        footnotes = undefined;
+    footnotes = [].slice.call(currentFootnotesElement.querySelectorAll('.footnote-container'));
+    footnotes.forEach(function (footnote, index) {
+        if (footnote.innerHTML != lastFootnotes[index].attrs.fnContents) {
+            var oldFootnote = lastFootnotes[index];
+            console.log('detected change:' + footnote.innerHTML);
+            var replacement = oldFootnote.type.create({
+                fnContents: footnote.innerHTML
+            }, null, footnote.styles);
+            // The editor.doc may sometimes contain the same node several times.
+            // This happens after copying, for example. We therefore need to check
+            // how many times the same footnote node shows up before the current
+            // footnote.
+            var previousInstances = 0,
+                i = undefined;
+            for (i = 0; i < index; i++) {
+                if (lastFootnotes[i] === lastFootnotes[index]) {
+                    previousInstances++;
+                }
+            }
+            var nodePos = getNodePos(editor.doc, oldFootnote, previousInstances);
+            lastFootnotes[index] = replacement;
+            editor.tr.replaceWith(nodePos.from, nodePos.to, replacement).apply();
         }
-      }
-      var nodePos = getNodePos(editor.doc, oldFootnote, previousInstances);
-      lastFootnotes[index] = replacement;
-      editor.tr.replaceWith(nodePos.from, nodePos.to, replacement).apply();
-    }
-  });
+    });
 },
     makeEditor = function makeEditor(where, schema) {
-  return new pm.ProseMirror({
-    place: where,
-    menuBar: { float: true },
-    schema: schema
-    //doc: doc
-  });
+    return new pm.ProseMirror({
+        place: where,
+        menuBar: {
+            float: true
+        },
+        schema: schema
+    });
 };
 
 where.innerHTML = '';
@@ -238,13 +247,13 @@ fnEditor = makeEditor(document.getElementById('footnote-editor'), pm.fidusFnSche
 editor.setContent(doc);
 renderFootnotes();
 editor.on('change', function () {
-  renderFootnotes();
+    renderFootnotes();
 });
 fnEditor.on('change', function () {
-  updateFootnotes();
+    updateFootnotes();
 });
 
-},{"../../prosemirror/src/edit/main":15,"../../prosemirror/src/menu/menubar":21,"../../prosemirror/src/model":26,"../../prosemirror/src/parse/dom":32,"./footnote-pm-schema":1}],3:[function(require,module,exports){
+},{"../../prosemirror/src/edit/main":15,"../../prosemirror/src/menu/menubar":21,"../../prosemirror/src/model":27,"../../prosemirror/src/parse/dom":32,"./footnote-pm-schema":1}],3:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -360,6 +369,7 @@ function ensureSelection(pm) {
 // find a cursor (as opposed to a node selection) when pressed.
 
 var keys = {
+  "Esc": nothing,
   "Enter": nothing,
   "Mod-Enter": nothing,
   "Shift-Enter": nothing,
@@ -480,7 +490,7 @@ function defineCommand(name, cmd) {
   globalCommands[name] = cmd instanceof Command ? cmd : new Command(name, cmd);
 }
 
-_model.NodeType.attachCommand = _model.StyleType.attachCommand = function (name, create) {
+_model.NodeType.attachCommand = _model.MarkType.attachCommand = function (name, create) {
   this.register("commands", { name: name, create: create });
 };
 
@@ -551,7 +561,7 @@ function initCommands(schema) {
     }
   }
   fromTypes(schema.nodes);
-  fromTypes(schema.styles);
+  fromTypes(schema.marks);
   return result;
 }
 
@@ -606,9 +616,9 @@ _model.HardBreak.attachCommand("insertHardBreak", function (type) {
   };
 });
 
-function inlineStyleActive(pm, type) {
+function markActive(pm, type) {
   var sel = pm.selection;
-  if (sel.empty) return (0, _model.containsStyle)(pm.activeStyles(), type);else return (0, _model.rangeHasStyle)(pm.doc, sel.from, sel.to, type);
+  if (sel.empty) return type.isInSet(pm.activeMarks());else return pm.doc.rangeHasMark(sel.from, sel.to, type);
 }
 
 function canAddInline(pm, type) {
@@ -617,16 +627,16 @@ function canAddInline(pm, type) {
   var to = _pm$selection2.to;
   var empty = _pm$selection2.empty;
 
-  if (empty) return !(0, _model.containsStyle)(pm.activeStyles(), type) && pm.doc.path(from.path).type.canContainStyle(type);
+  if (empty) return !type.isInSet(pm.activeMarks()) && pm.doc.path(from.path).type.canContainMark(type);
   var can = false;
   pm.doc.nodesBetween(from, to, function (node) {
-    if (can || node.isTextblock && !node.type.canContainStyle(type)) return false;
-    if (node.isInline && !(0, _model.containsStyle)(node.styles, type)) can = true;
+    if (can || node.isTextblock && !node.type.canContainMark(type)) return false;
+    if (node.isInline && !type.isInSet(node.marks)) can = true;
   });
   return can;
 }
 
-function inlineStyleApplies(pm, type) {
+function markApplies(pm, type) {
   var _pm$selection3 = pm.selection;
   var from = _pm$selection3.from;
   var to = _pm$selection3.to;
@@ -634,21 +644,21 @@ function inlineStyleApplies(pm, type) {
   var relevant = false;
   pm.doc.nodesBetween(from, to, function (node) {
     if (node.isTextblock) {
-      if (node.type.canContainStyle(type)) relevant = true;
+      if (node.type.canContainMark(type)) relevant = true;
       return false;
     }
   });
   return relevant;
 }
 
-function generateStyleCommands(type, name, labelName, info) {
+function generateMarkCommands(type, name, labelName, info) {
   if (!labelName) labelName = name;
   var cap = name.charAt(0).toUpperCase() + name.slice(1);
   type.attachCommand("set" + cap, function (type) {
     return {
       label: "Set " + labelName,
       run: function run(pm) {
-        pm.setStyle(type, true);
+        pm.setMark(type, true);
       },
       select: function select(pm) {
         return canAddInline(pm, type);
@@ -660,10 +670,10 @@ function generateStyleCommands(type, name, labelName, info) {
     return {
       label: "Remove " + labelName,
       run: function run(pm) {
-        pm.setStyle(type, false);
+        pm.setMark(type, false);
       },
       select: function select(pm) {
-        return inlineStyleActive(pm, type);
+        return markActive(pm, type);
       },
       icon: { from: name }
     };
@@ -672,13 +682,13 @@ function generateStyleCommands(type, name, labelName, info) {
     var command = {
       label: "Toggle " + labelName,
       run: function run(pm) {
-        pm.setStyle(type, null);
+        pm.setMark(type, null);
       },
       active: function active(pm) {
-        return inlineStyleActive(pm, type);
+        return markActive(pm, type);
       },
       select: function select(pm) {
-        return inlineStyleApplies(pm, type);
+        return markApplies(pm, type);
       }
     };
     for (var prop in info) {
@@ -687,7 +697,7 @@ function generateStyleCommands(type, name, labelName, info) {
   });
 }
 
-generateStyleCommands(_model.StrongStyle, "strong", null, {
+generateMarkCommands(_model.StrongMark, "strong", null, {
   menuGroup: "inline", menuRank: 20,
   icon: {
     width: 805, height: 1024,
@@ -696,7 +706,7 @@ generateStyleCommands(_model.StrongStyle, "strong", null, {
   key: "Mod-B"
 });
 
-generateStyleCommands(_model.EmStyle, "em", "emphasis", {
+generateMarkCommands(_model.EmMark, "em", "emphasis", {
   menuGroup: "inline", menuRank: 21,
   icon: {
     width: 585, height: 1024,
@@ -705,7 +715,7 @@ generateStyleCommands(_model.EmStyle, "em", "emphasis", {
   key: "Mod-I"
 });
 
-generateStyleCommands(_model.CodeStyle, "code", null, {
+generateMarkCommands(_model.CodeMark, "code", null, {
   menuGroup: "inline", menuRank: 22,
   icon: {
     width: 896, height: 1024,
@@ -714,14 +724,14 @@ generateStyleCommands(_model.CodeStyle, "code", null, {
   key: "Mod-`"
 });
 
-_model.LinkStyle.attachCommand("unlink", function (type) {
+_model.LinkMark.attachCommand("unlink", function (type) {
   return {
     label: "Unlink",
     run: function run(pm) {
-      pm.setStyle(type, false);
+      pm.setMark(type, false);
     },
     select: function select(pm) {
-      return inlineStyleActive(pm, type);
+      return markActive(pm, type);
     },
     active: function active() {
       return true;
@@ -731,15 +741,15 @@ _model.LinkStyle.attachCommand("unlink", function (type) {
   };
 });
 
-_model.LinkStyle.attachCommand("link", function (type) {
+_model.LinkMark.attachCommand("link", function (type) {
   return {
     label: "Add link",
     run: function run(pm, href, title) {
-      pm.setStyle(type, true, { href: href, title: title });
+      pm.setMark(type, true, { href: href, title: title });
     },
     params: [{ name: "Target", type: "text" }, { name: "Title", type: "text", "default": "" }],
     select: function select(pm) {
-      return inlineStyleApplies(pm, type) && !inlineStyleActive(pm, type);
+      return markApplies(pm, type) && !markActive(pm, type);
     },
     menuGroup: "inline", menuRank: 30,
     icon: {
@@ -778,41 +788,39 @@ _model.Image.attachCommand("insertImage", function (type) {
  * @param  {Object} parent The parent node.
  * @param  {int}    offset Offset to move from inside the node.
  * @param  {string} by     Size to delete by. Either "char" or "word".
- * @return {[type]}        [description]
  */
 function moveBackward(parent, offset, by) {
   if (by != "char" && by != "word") throw new Error("Unknown motion unit: " + by);
 
-  var _parent$childBefore = parent.childBefore(offset);
-
-  var index = _parent$childBefore.index;
-  var innerOffset = _parent$childBefore.innerOffset;
-
   var cat = null,
       counted = 0;
-  for (; index >= 0; index--, innerOffset = null) {
-    var child = parent.child(index),
-        size = child.offset;
-    if (!child.isText) return cat ? offset : offset - 1;
+  for (;;) {
+    if (offset == 0) return offset;
+
+    var _parent$chunkBefore = parent.chunkBefore(offset);
+
+    var start = _parent$chunkBefore.start;
+    var node = _parent$chunkBefore.node;
+
+    if (!node.isText) return cat ? offset : offset - 1;
 
     if (by == "char") {
-      for (var i = innerOffset == null ? size : innerOffset; i > 0; i--) {
-        if (!(0, _char.isExtendingChar)(child.text.charAt(i - 1))) return offset - 1;
+      for (var i = offset - start; i > 0; i--) {
+        if (!(0, _char.isExtendingChar)(node.text.charAt(i - 1))) return offset - 1;
         offset--;
       }
     } else if (by == "word") {
       // Work from the current position backwards through text of a singular
       // character category (e.g. "cat" of "#!*") until reaching a character in a
       // different category (i.e. the end of the word).
-      for (var i = innerOffset == null ? size : innerOffset; i > 0; i--) {
-        var nextCharCat = (0, _char.charCategory)(child.text.charAt(i - 1));
+      for (var i = offset - start; i > 0; i--) {
+        var nextCharCat = (0, _char.charCategory)(node.text.charAt(i - 1));
         if (cat == null || counted == 1 && cat == "space") cat = nextCharCat;else if (cat != nextCharCat) return offset;
         offset--;
         counted++;
       }
     }
   }
-  return offset;
 }
 
 defineCommand("deleteSelection", {
@@ -828,7 +836,7 @@ function deleteBarrier(pm, cut) {
   var around = pm.doc.path(cut.path);
   var before = around.child(cut.offset - 1),
       after = around.child(cut.offset);
-  if (before.type.canContainChildren(after) && pm.tr.join(cut).apply(andScroll) !== false) return;
+  if (before.type.canContainContent(after.type) && pm.tr.join(cut).apply(andScroll) !== false) return;
 
   var conn = undefined;
   if (after.isTextblock && (conn = before.type.findConnection(after.type))) {
@@ -909,33 +917,32 @@ defineCommand("deleteWordBefore", {
 function moveForward(parent, offset, by) {
   if (by != "char" && by != "word") throw new Error("Unknown motion unit: " + by);
 
-  var _parent$childAfter = parent.childAfter(offset);
-
-  var index = _parent$childAfter.index;
-  var innerOffset = _parent$childAfter.innerOffset;
-
   var cat = null,
       counted = 0;
-  for (; index < parent.length; index++, innerOffset = 0) {
-    var child = parent.child(index),
-        size = child.offset;
-    if (!child.isText) return cat ? offset : offset + 1;
+  for (;;) {
+    if (offset == parent.size) return offset;
+
+    var _parent$chunkAfter = parent.chunkAfter(offset);
+
+    var start = _parent$chunkAfter.start;
+    var node = _parent$chunkAfter.node;
+
+    if (!node.isText) return cat ? offset : offset + 1;
 
     if (by == "char") {
-      for (var i = innerOffset; i < size; i++) {
-        if (!(0, _char.isExtendingChar)(child.text.charAt(i + 1))) return offset + 1;
+      for (var i = offset - start; i < node.text.length; i++) {
+        if (!(0, _char.isExtendingChar)(node.text.charAt(i + 1))) return offset + 1;
         offset++;
       }
     } else if (by == "word") {
-      for (var i = innerOffset; i < size; i++) {
-        var nextCharCat = (0, _char.charCategory)(child.text.charAt(i));
+      for (var i = offset - start; i < node.text.length; i++) {
+        var nextCharCat = (0, _char.charCategory)(node.text.charAt(i));
         if (cat == null || counted == 1 && cat == "space") cat = nextCharCat;else if (cat != nextCharCat) return offset;
         offset++;
         counted++;
       }
     }
   }
-  return offset;
 }
 
 defineCommand("joinForward", {
@@ -945,7 +952,7 @@ defineCommand("joinForward", {
     var head = _pm$selection7.head;
     var empty = _pm$selection7.empty;
 
-    if (!empty || head.offset < pm.doc.path(head.path).maxOffset) return false;
+    if (!empty || head.offset < pm.doc.path(head.path).size) return false;
 
     // Find the node after this one
     var after = undefined,
@@ -953,7 +960,7 @@ defineCommand("joinForward", {
     for (var i = head.path.length - 1; !after && i >= 0; i--) {
       cut = head.shorten(i, 1);
       var _parent = pm.doc.path(cut.path);
-      if (cut.offset < _parent.length) after = _parent.child(cut.offset);
+      if (cut.offset < _parent.size) after = _parent.child(cut.offset);
     }
 
     // If there is no node after this, there's nothing to do
@@ -975,7 +982,7 @@ defineCommand("deleteCharAfter", {
     var head = _pm$selection8.head;
     var empty = _pm$selection8.empty;
 
-    if (!empty || head.offset == pm.doc.path(head.path).maxOffset) return false;
+    if (!empty || head.offset == pm.doc.path(head.path).size) return false;
     var to = moveForward(pm.doc.path(head.path), head.offset, "char");
     return pm.tr["delete"](head, new _model.Pos(head.path, to)).apply(andScroll);
   },
@@ -990,7 +997,7 @@ defineCommand("deleteWordAfter", {
     var head = _pm$selection9.head;
     var empty = _pm$selection9.empty;
 
-    if (!empty || head.offset == pm.doc.path(head.path).maxOffset) return false;
+    if (!empty || head.offset == pm.doc.path(head.path).size) return false;
     var to = moveForward(pm.doc.path(head.path), head.offset, "word");
     return pm.tr["delete"](head, new _model.Pos(head.path, to)).apply(andScroll);
   },
@@ -1145,7 +1152,7 @@ defineCommand("newlineInCode", {
     var from = _pm$selection16.from;
     var to = _pm$selection16.to;
     var node = _pm$selection16.node;var block = undefined;
-    if (!node && _model.Pos.samePath(from.path, to.path) && (block = pm.doc.path(from.path)).type.isCode && to.offset < block.maxOffset) return pm.tr.typeText("\n").apply(andScroll);else return false;
+    if (!node && _model.Pos.samePath(from.path, to.path) && (block = pm.doc.path(from.path)).type.isCode && to.offset < block.size) return pm.tr.typeText("\n").apply(andScroll);else return false;
   },
   key: "Enter(10)"
 });
@@ -1191,7 +1198,7 @@ defineCommand("splitBlock", {
       if (!from.offset) return false;
       return pm.tr.split(from).apply(andScroll);
     } else {
-      var type = to.offset == block.maxOffset ? pm.schema.defaultTextblockType() : null;
+      var type = to.offset == block.size ? pm.schema.defaultTextblockType() : null;
       return pm.tr["delete"](from, to).split(from, 1, type).apply(andScroll);
     }
   },
@@ -1212,7 +1219,7 @@ _model.ListItem.attachCommand("splitListItem", function (type) {
       var toParent = from.shorten(),
           grandParent = pm.doc.path(toParent.path);
       if (grandParent.type != type) return false;
-      var nextType = to.offset == grandParent.child(toParent.offset).maxOffset ? pm.schema.defaultTextblockType() : null;
+      var nextType = to.offset == grandParent.child(toParent.offset).size ? pm.schema.defaultTextblockType() : null;
       return pm.tr["delete"](from, to).split(from, 2, nextType).apply(andScroll);
     },
     key: "Enter(50)"
@@ -1237,7 +1244,7 @@ function blockTypeCommand(type, name, labelName, attrs, key) {
         var to = _pm$selection22.to;
         var node = _pm$selection22.node;
 
-        if (node) return node.isTextblock && !(0, _model.compareMarkup)(type, node.type, attrs, node.attrs);else return !(0, _transform.alreadyHasBlockType)(pm.doc, from, to, type, attrs);
+        if (node) return node.isTextblock && !node.hasMarkup(type, attrs);else return !(0, _transform.alreadyHasBlockType)(pm.doc, from, to, type, attrs);
       },
       key: key
     };
@@ -1355,7 +1362,7 @@ function currentTextblockType(pm) {
   for (var i = 0; i < types.length; i++) {
     var tp = types[i],
         val = tp.value;
-    if ((0, _model.compareMarkup)(val.type, node.type, val.attrs, node.attrs)) return tp;
+    if (node.hasMarkup(val.type, val.attrs)) return tp;
   }
 }
 
@@ -1407,13 +1414,13 @@ function selectBlockHorizontally(pm, dir) {
   }
 
   var parent = undefined;
-  if (!node && (parent = pm.doc.path(from.path)) && (dir > 0 ? from.offset < parent.maxOffset : from.offset)) {
-    var _ref2 = dir > 0 ? parent.childAfter(from.offset) : parent.childBefore(from.offset);
+  if (!node && (parent = pm.doc.path(from.path)) && (dir > 0 ? from.offset < parent.size : from.offset)) {
+    var _ref2 = dir > 0 ? parent.chunkAfter(from.offset) : parent.chunkBefore(from.offset);
 
     var nextNode = _ref2.node;
-    var innerOffset = _ref2.innerOffset;
+    var start = _ref2.start;
 
-    if (nextNode && nextNode.type.selectable && (dir > 0 ? !innerOffset : innerOffset == nextNode.offset)) {
+    if (nextNode.type.selectable && start == from.offset - (dir > 0 ? 0 : 1)) {
       pm.setNodeSelection(dir < 0 ? from.move(-1) : from);
       return true;
     }
@@ -1506,7 +1513,7 @@ defineCommand("selectBlockDown", {
   key: "Down"
 });
 
-},{"../dom":3,"../model":26,"../transform":39,"../util/sortedinsert":50,"./char":5,"./keys":14,"./selection":18}],7:[function(require,module,exports){
+},{"../dom":3,"../model":27,"../transform":39,"../util/sortedinsert":50,"./char":5,"./keys":14,"./selection":18}],7:[function(require,module,exports){
 "use strict";
 
 var _dom = require("../dom");
@@ -1534,10 +1541,10 @@ var _selection = require("./selection");
 function isAtEnd(node, pos, depth) {
   for (var i = depth || 0; i < pos.path.length; i++) {
     var n = pos.path[depth];
-    if (n < node.length - 1) return false;
+    if (n < node.size - 1) return false;
     node = node.child(n);
   }
-  return pos.offset == node.maxOffset;
+  return pos.offset == node.size;
 }
 function isAtStart(pos, depth) {
   if (pos.offset > 0) return false;
@@ -1561,14 +1568,14 @@ function parseNearSelection(pm) {
       var startOffset = depth == from.depth ? from.offset : from.path[depth];
       if (fromStart && startOffset > 0) startOffset--;
       var endOffset = depth == to.depth ? to.offset : to.path[depth] + 1;
-      if (toEnd && endOffset < node.length - 1) endOffset++;
+      if (toEnd && endOffset < node.size - 1) endOffset++;
       var parsed = (0, _parseDom.fromDOM)(pm.schema, dom, { topNode: node.copy(),
         from: startOffset,
-        to: dom.childNodes.length - (node.length - endOffset) });
-      parsed = parsed.copy(node.slice(0, startOffset).concat(parsed.children).concat(node.slice(endOffset)));
+        to: dom.childNodes.length - (node.size - endOffset) });
+      parsed = parsed.copy(node.content.slice(0, startOffset).append(parsed.content).append(node.content.slice(endOffset)));
       for (var i = depth - 1; i >= 0; i--) {
         var wrap = pm.doc.path(from.path.slice(0, i));
-        parsed = wrap.splice(from.path[i], from.path[i] + 1, [parsed]);
+        parsed = wrap.replace(from.path[i], parsed);
       }
       return parsed;
     }
@@ -1579,13 +1586,13 @@ function parseNearSelection(pm) {
 
 function applyDOMChange(pm) {
   var updated = parseNearSelection(pm);
-  var changeStart = (0, _model.findDiffStart)(pm.doc, updated);
+  var changeStart = (0, _model.findDiffStart)(pm.doc.content, updated.content);
   if (changeStart) {
-    var changeEnd = findDiffEndConstrained(pm.doc, updated, changeStart);
+    var changeEnd = findDiffEndConstrained(pm.doc.content, updated.content, changeStart);
     // Mark nodes touched by this change as 'to be redrawn'
-    pm.markRangeDirty((0, _model.siblingRange)(pm.doc, changeStart.a, changeEnd.a));
+    pm.markRangeDirty((0, _model.siblingRange)(pm.doc, changeStart, changeEnd.a));
 
-    pm.tr.replace(changeStart.a, changeEnd.a, updated, changeStart.b, changeEnd.b).apply();
+    pm.tr.replace(changeStart, changeEnd.a, updated, changeStart, changeEnd.b).apply();
     return true;
   } else {
     return false;
@@ -1604,8 +1611,8 @@ function offsetBy(first, second, pos) {
 function findDiffEndConstrained(a, b, start) {
   var end = (0, _model.findDiffEnd)(a, b);
   if (!end) return end;
-  if (end.a.cmp(start.a) < 0) return { a: start.a, b: offsetBy(end.a, start.a, end.b) };
-  if (end.b.cmp(start.b) < 0) return { a: offsetBy(end.b, start.b, end.a), b: start.b };
+  if (end.a.cmp(start) < 0) return { a: start, b: offsetBy(end.a, start, end.b) };
+  if (end.b.cmp(start) < 0) return { a: offsetBy(end.b, start, end.a), b: start };
   return end;
 }
 
@@ -1694,7 +1701,7 @@ function scanText(start, end) {
   }
 }
 
-},{"../model":26,"../parse/dom":32,"../transform/tree":47,"./selection":18}],9:[function(require,module,exports){
+},{"../model":27,"../parse/dom":32,"../transform/tree":47,"./selection":18}],9:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -1709,23 +1716,30 @@ var _serializeDom = require("../serialize/dom");
 
 var _dom = require("../dom");
 
-var nonEditable = { html_block: true, html_tag: true, horizontal_rule: true };
+var _main = require("./main");
+
+// FIXME clean up threading of path and offset, maybe remove from DOM renderer entirely
 
 function options(path, ranges) {
   return {
     onRender: function onRender(node, dom, offset) {
-      if (!node.isInline && offset != null) dom.setAttribute("pm-path", offset);
-      if (nonEditable.hasOwnProperty(node.type.name)) dom.contentEditable = false;
+      if (node.type.contains == null) {
+        dom.contentEditable = false;
+        if (node.isBlock) dom.setAttribute("pm-leaf", "true");
+      }
+      if (node.isBlock && offset != null) dom.setAttribute("pm-offset", offset);
+      if (node.isTextblock) adjustTrailingHacks(dom, node);
+
       return dom;
     },
     renderInlineFlat: function renderInlineFlat(node, dom, offset) {
       ranges.advanceTo(new _model.Pos(path, offset));
-      var end = new _model.Pos(path, offset + node.offset);
+      var end = new _model.Pos(path, offset + node.width);
       var nextCut = ranges.nextChangeBefore(end);
 
       var inner = dom,
           wrapped = undefined;
-      for (var i = 0; i < node.styles.length; i++) {
+      for (var i = 0; i < node.marks.length; i++) {
         inner = inner.firstChild;
       }if (dom.nodeType != 1) {
         dom = (0, _dom.elt)("span", null, dom);
@@ -1735,26 +1749,25 @@ function options(path, ranges) {
         wrapped = inner == dom ? dom = (0, _dom.elt)("span", null, inner) : inner.parentNode.appendChild((0, _dom.elt)("span", null, inner));
       }
 
-      dom.setAttribute("pm-span", offset + "-" + end.offset);
-      if (!node.isText) dom.setAttribute("pm-span-atom", "true");
+      dom.setAttribute("pm-offset", offset);
+      if (node.type.contains == null) dom.setAttribute("pm-leaf", node.isText ? node.width : "true");
 
       var inlineOffset = 0;
       while (nextCut) {
         var size = nextCut - offset;
         var split = splitSpan(wrapped, size);
         if (ranges.current.length) split.className = ranges.current.join(" ");
-        split.setAttribute("pm-span-offset", inlineOffset);
+        split.setAttribute("pm-inner-offset", inlineOffset);
         inlineOffset += size;
         offset += size;
         ranges.advanceTo(new _model.Pos(path, offset));
-        if (!(nextCut = ranges.nextChangeBefore(end))) wrapped.setAttribute("pm-span-offset", inlineOffset);
+        if (!(nextCut = ranges.nextChangeBefore(end))) wrapped.setAttribute("pm-inner-offset", inlineOffset);
       }
 
       if (ranges.current.length) wrapped.className = ranges.current.join(" ");
       return dom;
     },
-    document: document,
-    path: path
+    document: document, path: path
   };
 }
 
@@ -1771,72 +1784,82 @@ function draw(pm, doc) {
   pm.content.appendChild((0, _serializeDom.toDOM)(doc, options([], pm.ranges.activeRangeTracker())));
 }
 
-function deleteNextNodes(parent, at, amount) {
-  for (var i = 0; i < amount; i++) {
-    var prev = at;
-    at = at.nextSibling;
-    parent.removeChild(prev);
+function adjustTrailingHacks(dom, node) {
+  var needs = node.size == 0 || node.lastChild.type.isBR ? "br" : node.lastChild.type.contains == null ? "text" : null;
+  var last = dom.lastChild;
+  var has = !last || last.nodeType != 1 || !last.hasAttribute("pm-ignore") ? null : last.nodeName == "BR" ? "br" : "text";
+  if (needs != has) {
+    if (has) dom.removeChild(last);
+    if (needs) dom.appendChild(needs == "br" ? (0, _dom.elt)("br", { "pm-ignore": "trailing-break" }) : (0, _dom.elt)("span", { "pm-ignore": "cursor-text" }, ""));
   }
-  return at;
+}
+
+function findNodeIn(iter, node) {
+  var copy = iter.copy();
+  for (var child = undefined; child = copy.next().value;) {
+    if (child == node) return child;
+  }
+}
+
+function movePast(dom) {
+  var next = dom.nextSibling;
+  dom.parentNode.removeChild(dom);
+  return next;
 }
 
 function redraw(pm, dirty, doc, prev) {
-  var ranges = pm.ranges.activeRangeTracker();
-  var path = [];
+  var opts = options([], pm.ranges.activeRangeTracker());
 
   function scan(dom, node, prev) {
-    var status = [],
-        inPrev = [],
-        inNode = [];
-    for (var i = 0, _j = 0; i < prev.length && _j < node.width; i++) {
-      var cur = prev.child(i),
-          dirtyStatus = dirty.get(cur);
-      status.push(dirtyStatus);
-      var matching = dirtyStatus ? -1 : node.children.indexOf(cur, _j);
-      if (matching > -1) {
-        inNode[i] = matching;
-        inPrev[matching] = i;
-        _j = matching + 1;
+    var iNode = node.iter(),
+        iPrev = prev.iter(),
+        pChild = iPrev.next().value;
+    var domPos = dom.firstChild;
+
+    for (var child = undefined; child = iNode.next().value;) {
+      var offset = iNode.offset - child.width,
+          matching = undefined,
+          reuseDOM = undefined;
+      if (!node.isTextblock) opts.path.push(offset);
+
+      if (pChild == child) {
+        matching = pChild;
+      } else if (matching = findNodeIn(iPrev, child)) {
+        while (pChild != matching) {
+          pChild = iPrev.next().value;
+          domPos = movePast(domPos);
+        }
       }
-    }
 
-    if (node.isTextblock) {
-      var needsBR = node.length == 0 || node.lastChild.type == node.type.schema.nodes.hard_break;
-      var last = dom.lastChild,
-          hasBR = last && last.nodeType == 1 && last.hasAttribute("pm-force-br");
-      if (needsBR && !hasBR) dom.appendChild((0, _dom.elt)("br", { "pm-force-br": "true" }));else if (!needsBR && hasBR) dom.removeChild(last);
-    }
-
-    var domPos = dom.firstChild,
-        j = 0;
-    var block = node.isTextblock;
-    for (var i = 0, offset = 0; i < node.length; i++) {
-      var child = node.child(i);
-      if (!block) path.push(i);
-      var found = inPrev[i];
-      var nodeLeft = true;
-      if (found != null) {
-        domPos = deleteNextNodes(dom, domPos, found - j);
-        j = found;
-      } else if (!block && j < prev.length && inNode[j] == null && status[j] != 2 && child.sameMarkup(prev.child(j))) {
-        scan(domPos, child, prev.child(j));
+      if (matching && !dirty.get(matching)) {
+        reuseDOM = true;
+      } else if (pChild && !child.isText && child.sameMarkup(pChild) && dirty.get(pChild) != _main.DIRTY_REDRAW) {
+        reuseDOM = true;
+        scan(domPos, child, pChild);
       } else {
-        dom.insertBefore((0, _serializeDom.renderNodeToDOM)(child, options(path, ranges), block ? offset : i), domPos);
-        nodeLeft = false;
+        var rendered = (0, _serializeDom.renderNodeToDOM)(child, opts, offset);
+        dom.insertBefore(rendered, domPos);
+        reuseDOM = false;
       }
-      if (nodeLeft) {
-        if (block) domPos.setAttribute("pm-span", offset + "-" + (offset + child.offset));else domPos.setAttribute("pm-path", i);
+
+      if (reuseDOM) {
+        domPos.setAttribute("pm-offset", offset);
         domPos = domPos.nextSibling;
-        j++;
+        pChild = iPrev.next().value;
       }
-      if (block) offset += child.offset;else path.pop();
+      if (!node.isTextblock) opts.path.pop();
     }
-    deleteNextNodes(dom, domPos, prev.length - j);
+
+    while (pChild) {
+      domPos = movePast(domPos);
+      pChild = iPrev.next().value;
+    }
+    if (node.isTextblock) adjustTrailingHacks(dom, node);
   }
   scan(pm.content, doc, prev);
 }
 
-},{"../dom":3,"../model":26,"../serialize/dom":35}],10:[function(require,module,exports){
+},{"../dom":3,"../model":27,"../serialize/dom":35,"./main":15}],10:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -2015,7 +2038,7 @@ var CompressionWorker = (function () {
             }
             if (extra > 0) {
               var _start = mappedStep.from.move(-extra);
-              mappedStep = new _transform.Step("replace", _start, mappedStep.to, _start, { nodes: [], openLeft: 0, openRight: 0 });
+              mappedStep = new _transform.Step("replace", _start, mappedStep.to, _start);
             }
           }
           var result = mappedStep && mappedStep.apply(this.doc);
@@ -2060,7 +2083,7 @@ var CompressionWorker = (function () {
 })();
 
 function isDelStep(step) {
-  return step.name == "replace" && step.from.offset < step.to.offset && _model.Pos.samePath(step.from.path, step.to.path) && step.param.nodes.length == 0;
+  return step.name == "replace" && step.from.offset < step.to.offset && _model.Pos.samePath(step.from.path, step.to.path) && (!step.param || step.param.content.size == 0);
 }
 
 var compressStepCount = 150;
@@ -2382,7 +2405,7 @@ var History = (function () {
 
 exports.History = History;
 
-},{"../model":26,"../transform":39}],12:[function(require,module,exports){
+},{"../model":27,"../transform":39}],12:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -2481,6 +2504,8 @@ var _model = require("../model");
 
 var _parseDom = require("../parse/dom");
 
+var _parseText = require("../parse/text");
+
 var _dom = require("../dom");
 
 var _serializeDom = require("../serialize/dom");
@@ -2525,7 +2550,7 @@ var Input = (function () {
 
     this.keymaps = [];
 
-    this.storedStyles = null;
+    this.storedMarks = null;
 
     this.dropTarget = pm.wrapper.appendChild((0, _dom.elt)("div", { "class": "ProseMirror-drop-target" }));
 
@@ -2541,7 +2566,7 @@ var Input = (function () {
     }
 
     pm.on("selectionChange", function () {
-      return _this.storedStyles = null;
+      return _this.storedMarks = null;
     });
   }
 
@@ -2641,9 +2666,9 @@ handlers.keyup = function (pm, e) {
 
 function inputText(pm, range, text) {
   if (range.empty && !text) return false;
-  var styles = pm.input.storedStyles || (0, _model.spanStylesAt)(pm.doc, range.from);
+  var marks = pm.input.storedMarks || pm.doc.marksAt(range.from);
   var tr = pm.tr;
-  tr.replaceWith(range.from, range.to, pm.schema.text(text, styles)).apply();
+  tr.replaceWith(range.from, range.to, pm.schema.text(text, marks)).apply();
   pm.scrollIntoView();
   pm.signal("textInput", text);
 }
@@ -2828,13 +2853,7 @@ handlers.paste = function (pm, e) {
         from = undefined,
         to = undefined;
     if (pm.input.shiftKey && txt) {
-      (function () {
-        var paragraphs = txt.split(/[\r\n]+/);
-        var styles = (0, _model.spanStylesAt)(pm.doc, sel.from);
-        doc = pm.schema.node("doc", null, paragraphs.map(function (s) {
-          return pm.schema.node("paragraph", null, [pm.schema.text(s, styles)]);
-        }));
-      })();
+      doc = (0, _parseText.fromText)(pm.schema, txt);
     } else if (lastCopied && (lastCopied.html == html || lastCopied.text == txt)) {
       ;var _lastCopied = lastCopied;
       doc = _lastCopied.doc;
@@ -2922,7 +2941,7 @@ handlers.blur = function (pm) {
   pm.signal("blur");
 };
 
-},{"../dom":3,"../model":26,"../parse":33,"../parse/dom":32,"../serialize/dom":35,"../serialize/text":37,"./capturekeys":4,"./domchange":8,"./keys":14,"./selection":18}],14:[function(require,module,exports){
+},{"../dom":3,"../model":27,"../parse":33,"../parse/dom":32,"../parse/text":34,"../serialize/dom":35,"../serialize/text":37,"./capturekeys":4,"./domchange":8,"./keys":14,"./selection":18}],14:[function(require,module,exports){
 // From CodeMirror, should be factored into its own NPM module
 
 // declare_global: navigator
@@ -3196,7 +3215,7 @@ var ProseMirror = (function () {
     this.setDocInner(opts.docFormat ? (0, _parse.convertFrom)(this.schema, opts.doc, opts.docFormat, { document: document }) : opts.doc);
     (0, _draw.draw)(this, this.doc);
     this.content.contentEditable = true;
-    if (opts.label) this.content.setAttribute('aria-label', opts.label);
+    if (opts.label) this.content.setAttribute("aria-label", opts.label);
 
     this.mod = Object.create(null);
     this.operation = null;
@@ -3303,8 +3322,9 @@ var ProseMirror = (function () {
     value: function setNodeSelection(pos) {
       this.checkPos(pos, false);
       var parent = this.doc.path(pos.path);
-      if (pos.offset >= parent.maxOffset) throw new Error("Trying to set a node selection at the end of a node");
-      var node = parent.isTextblock ? parent.childAfter(pos.offset).node : parent.child(pos.offset);
+      if (pos.offset >= parent.size) throw new Error("Trying to set a node selection at the end of a node");
+      var node = parent.child(pos.offset);
+      if (!node.type.selectable) throw new Error("Trying to select a non-selectable node");
       this.input.maybeAbortComposition();
       this.sel.setAndSignal(new _selection2.NodeSelection(pos, pos.move(1), node));
     }
@@ -3400,23 +3420,23 @@ var ProseMirror = (function () {
       this.ranges.removeRange(range);
     }
   }, {
-    key: "setStyle",
-    value: function setStyle(type, to, attrs) {
+    key: "setMark",
+    value: function setMark(type, to, attrs) {
       var sel = this.selection;
       if (sel.empty) {
-        var styles = this.activeStyles();
-        if (to == null) to = !(0, _model.containsStyle)(styles, type);
-        if (to && !this.doc.path(sel.head.path).type.canContainStyle(type)) return;
-        this.input.storedStyles = to ? type.create(attrs).addToSet(styles) : (0, _model.removeStyle)(styles, type);
-        this.signal("activeStyleChange");
+        var marks = this.activeMarks();
+        if (to == null) to = !type.isInSet(marks);
+        if (to && !this.doc.path(sel.head.path).type.canContainMark(type)) return;
+        this.input.storedMarks = to ? type.create(attrs).addToSet(marks) : type.removeFromSet(marks);
+        this.signal("activeMarkChange");
       } else {
-        if (to != null ? to : !(0, _model.rangeHasStyle)(this.doc, sel.from, sel.to, type)) this.apply(this.tr.addStyle(sel.from, sel.to, type.create(attrs)));else this.apply(this.tr.removeStyle(sel.from, sel.to, type));
+        if (to != null ? to : !this.doc.rangeHasMark(sel.from, sel.to, type)) this.apply(this.tr.addMark(sel.from, sel.to, type.create(attrs)));else this.apply(this.tr.removeMark(sel.from, sel.to, type));
       }
     }
   }, {
-    key: "activeStyles",
-    value: function activeStyles() {
-      return this.input.storedStyles || (0, _model.spanStylesAt)(this.doc, this.selection.head);
+    key: "activeMarks",
+    value: function activeMarks() {
+      return this.input.storedMarks || this.doc.marksAt(this.selection.head);
     }
   }, {
     key: "focus",
@@ -3486,23 +3506,25 @@ var ProseMirror = (function () {
             toEnd = depth == to.depth;
         if (!fromEnd && !toEnd && from.path[depth] == to.path[depth]) {
           var child = node.child(from.path[depth]);
-          if (!dirty.has(child)) dirty.set(child, 1);
+          if (!dirty.has(child)) dirty.set(child, DIRTY_RESCAN);
           node = child;
         } else {
-          var start = fromEnd ? from.offset : from.path[depth];
-          var end = toEnd ? to.offset : to.path[depth] + 1;
-          if (node.isTextblock) {
-            for (var offset = 0, i = 0; offset < end; i++) {
-              var child = node.child(i);
-              offset += child.offset;
-              if (offset > start) dirty.set(child, 2);
+          var _ret = (function () {
+            var start = fromEnd ? from.offset : from.path[depth];
+            var end = toEnd ? to.offset : to.path[depth] + 1;
+            if (node.isTextblock) {
+              node.forEach(function (child, cStart, cEnd) {
+                if (cStart < end && cEnd > start) dirty.set(child, DIRTY_REDRAW);
+              });
+            } else {
+              for (var i = node.iter(start, end), child = undefined; child = i.next().value;) {
+                dirty.set(child, DIRTY_REDRAW);
+              }
             }
-          } else {
-            for (var i = start; i < end; i++) {
-              dirty.set(node.child(i), 2);
-            }
-          }
-          break;
+            return "break";
+          })();
+
+          if (_ret === "break") break;
         }
       }
     }
@@ -3516,7 +3538,7 @@ var ProseMirror = (function () {
     key: "selectedDoc",
     get: function get() {
       var sel = this.selection;
-      return (0, _model.sliceBetween)(this.doc, sel.from, sel.to);
+      return this.doc.sliceBetween(sel.from, sel.to);
     }
   }, {
     key: "selectedText",
@@ -3534,7 +3556,11 @@ var ProseMirror = (function () {
 })();
 
 exports.ProseMirror = ProseMirror;
+var DIRTY_RESCAN = 1,
+    DIRTY_REDRAW = 2;
 
+exports.DIRTY_RESCAN = DIRTY_RESCAN;
+exports.DIRTY_REDRAW = DIRTY_REDRAW;
 var nullOptions = {};
 
 (0, _event.eventMixin)(ProseMirror);
@@ -3566,24 +3592,24 @@ var EditorTransform = (function (_Transform) {
     }
   }, {
     key: "replaceSelection",
-    value: function replaceSelection(node, inheritStyles) {
+    value: function replaceSelection(node, inheritMarks) {
       var _selection = this.selection;
       var empty = _selection.empty;
       var from = _selection.from;
       var to = _selection.to;
       var selNode = _selection.node;var parent = undefined;
-      if (node && node.isInline && inheritStyles !== false) {
-        var styles = empty ? this.pm.input.storedStyles : (0, _model.spanStylesAt)(this.doc, from);
-        node = node.type.create(node.attrs, node.text, styles);
+      if (node && node.isInline && inheritMarks !== false) {
+        var marks = empty ? this.pm.input.storedMarks : this.doc.marksAt(from);
+        node = node.type.create(node.attrs, node.text, marks);
       }
 
       if (selNode && selNode.isTextblock && node && node.isInline) {
         // Putting inline stuff onto a selected textblock puts it inside
         from = new _model.Pos(from.toPath(), 0);
-        to = new _model.Pos(from.path, selNode.maxOffset);
+        to = new _model.Pos(from.path, selNode.size);
       } else if (selNode) {
         // This node can not simply be removed/replaced. Remove its parent as well
-        while (from.depth && from.offset == 0 && (parent = this.doc.path(from.path)) && from.offset == parent.maxOffset - 1 && !parent.type.canBeEmpty && !(node && parent.type.canContain(node))) {
+        while (from.depth && from.offset == 0 && (parent = this.doc.path(from.path)) && from.offset == parent.size - 1 && !parent.type.canBeEmpty && !(node && parent.type.canContain(node))) {
           from = from.shorten();
           to = to.shorten(null, 1);
         }
@@ -3591,7 +3617,7 @@ var EditorTransform = (function (_Transform) {
         // Inserting a block node into a textblock. Try to insert it above by splitting the textblock
         this["delete"](from, to);
         var _parent = this.doc.path(from.path);
-        if (from.offset && from.offset != _parent.maxOffset) this.split(from);
+        if (from.offset && from.offset != _parent.size) this.split(from);
         return this.insert(from.shorten(null, from.offset ? 1 : 0), node);
       }
 
@@ -3617,7 +3643,7 @@ var EditorTransform = (function (_Transform) {
   return EditorTransform;
 })(_transform.Transform);
 
-},{"../dom":3,"../model":26,"../parse":33,"../parse/text":34,"../serialize":36,"../serialize/text":37,"../transform":39,"../util/map":49,"../util/sortedinsert":50,"./commands":6,"./css":7,"./draw":9,"./event":10,"./history":11,"./input":13,"./keys":14,"./options":16,"./range":17,"./selection":18}],16:[function(require,module,exports){
+},{"../dom":3,"../model":27,"../parse":33,"../parse/text":34,"../serialize":36,"../serialize/text":37,"../transform":39,"../util/map":49,"../util/sortedinsert":50,"./commands":6,"./css":7,"./draw":9,"./event":10,"./history":11,"./input":13,"./keys":14,"./options":16,"./range":17,"./selection":18}],16:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -3702,7 +3728,7 @@ function setOption(pm, name, value) {
   if (desc.update) desc.update(pm, value, old, false);
 }
 
-},{"../model":26,"./commands":6}],17:[function(require,module,exports){
+},{"../model":27,"./commands":6}],17:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -3898,8 +3924,6 @@ var RangeTracker = (function () {
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-
-var _slicedToArray = (function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; })();
 
 var _get = function get(_x, _x2, _x3) { var _again = true; _function: while (_again) { var object = _x, property = _x2, receiver = _x3; _again = false; if (object === null) object = Function.prototype; var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { _x = parent; _x2 = property; _x3 = receiver; _again = true; desc = parent = undefined; continue _function; } } else if ("value" in desc) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } } };
 
@@ -4178,8 +4202,7 @@ var NodeSelection = (function (_Selection) {
       var from = mapping.map(this.from, 1).pos;
       var to = mapping.map(this.to, -1).pos;
       if (_model.Pos.samePath(from.path, to.path) && from.offset == to.offset - 1) {
-        var _parent = doc.path(from.path);
-        var node = _parent.isTextblock ? _parent.childAfter(from.offset).node : _parent.child(from.offset);
+        var node = doc.nodeAfter(from);
         if (node.type.selectable) return new NodeSelection(from, to, node);
       }
       return findSelectionNear(doc, from);
@@ -4247,46 +4270,60 @@ var TextSelection = (function (_Selection2) {
 
 exports.TextSelection = TextSelection;
 
-function pathFromNode(node) {
+function pathFromDOM(node) {
   var path = [];
   for (;;) {
-    var attr = node.getAttribute("pm-path");
+    var attr = node.getAttribute("pm-offset");
     if (!attr) return path;
     path.unshift(+attr);
     node = node.parentNode;
   }
 }
 
-function posFromDOMInner(pm, node, domOffset, loose) {
+function widthFromDOM(dom) {
+  var attr = dom.getAttribute("pm-leaf");
+  return attr && attr != "true" ? +attr : 1;
+}
+
+function posFromDOMInner(pm, dom, domOffset, loose) {
   if (!loose && pm.operation && pm.doc != pm.operation.doc) throw new Error("Fetching a position from an outdated DOM structure");
 
   var extraOffset = 0,
       tag = undefined;
   for (;;) {
-    if (node.nodeType == 3) extraOffset += domOffset;else if (node.hasAttribute("pm-path") || node == pm.content) break;else if (tag = node.getAttribute("pm-span-offset")) extraOffset += +tag;
+    var adjust = 0;
+    if (dom.nodeType == 3) {
+      extraOffset += domOffset;
+    } else if (dom.hasAttribute("pm-offset") || dom == pm.content) {
+      break;
+    } else if (tag = dom.getAttribute("pm-inner-offset")) {
+      extraOffset += +tag;
+      adjust = -1;
+    } else if (domOffset && domOffset == dom.childNodes.length) {
+      adjust = 1;
+    }
 
-    var _parent2 = node.parentNode;
-    domOffset = Array.prototype.indexOf.call(_parent2.childNodes, node) + (node.nodeType != 3 && domOffset == node.childNodes.length ? 1 : 0);
-    node = _parent2;
+    var _parent = dom.parentNode;
+    domOffset = adjust < 0 ? 0 : Array.prototype.indexOf.call(_parent.childNodes, dom) + adjust;
+    dom = _parent;
   }
+
+  var path = pathFromDOM(dom);
+  if (dom.hasAttribute("pm-leaf")) return _model.Pos.from(path, extraOffset + (domOffset ? 1 : 0));
 
   var offset = 0;
   for (var i = domOffset - 1; i >= 0; i--) {
-    var child = node.childNodes[i];
+    var child = dom.childNodes[i];
     if (child.nodeType == 3) {
       if (loose) extraOffset += child.nodeValue.length;
-    } else if (tag = child.getAttribute("pm-span")) {
-      offset = parseSpan(tag).to;
+    } else if (tag = child.getAttribute("pm-offset")) {
+      offset = +tag + widthFromDOM(child);
       break;
-    } else if (tag = child.getAttribute("pm-path")) {
-      offset = +tag + 1;
-      extraOffset = 0;
-      break;
-    } else if (loose) {
+    } else if (loose && !child.hasAttribute("pm-ignore")) {
       extraOffset += child.textContent.length;
     }
   }
-  return new _model.Pos(pathFromNode(node), offset + extraOffset);
+  return new _model.Pos(path, offset + extraOffset);
 }
 
 function posFromDOM(pm, node, offset) {
@@ -4306,11 +4343,11 @@ function rangeFromDOMLoose(pm) {
 function findByPath(node, n, fromEnd) {
   for (var ch = fromEnd ? node.lastChild : node.firstChild; ch; ch = fromEnd ? ch.previousSibling : ch.nextSibling) {
     if (ch.nodeType != 1) continue;
-    var path = ch.getAttribute("pm-path");
-    if (!path) {
+    var offset = ch.getAttribute("pm-offset");
+    if (!offset) {
       var found = findByPath(ch, n);
       if (found) return found;
-    } else if (+path == n) {
+    } else if (+offset == n) {
       return ch;
     }
   }
@@ -4325,32 +4362,14 @@ function resolvePath(parent, path) {
   return node;
 }
 
-function parseSpan(span) {
-  var _dD$$exec = /^(\d+)-(\d+)$/.exec(span);
-
-  var _dD$$exec2 = _slicedToArray(_dD$$exec, 3);
-
-  var _ = _dD$$exec2[0];
-  var from = _dD$$exec2[1];
-  var to = _dD$$exec2[2];
-
-  return { from: +from, to: +to };
-}
-
 function findByOffset(node, offset, after) {
   function search(node) {
     for (var ch = node.firstChild, i = 0, attr = undefined; ch; ch = ch.nextSibling, i++) {
       if (ch.nodeType != 1) continue;
-      if (attr = ch.getAttribute("pm-span")) {
-        var _parseSpan = parseSpan(attr);
-
-        var from = _parseSpan.from;
-        var to = _parseSpan.to;
-
-        if (after ? from == offset : to >= offset) return { node: ch, offset: i, innerOffset: offset - from };
-      } else if (attr = ch.getAttribute("pm-path")) {
-        var diff = offset - +attr;
-        if (diff == 0 || after && diff == 1) return { node: ch, offset: i, innerOffset: diff };
+      if (attr = ch.getAttribute("pm-offset")) {
+        var diff = offset - +attr,
+            width = widthFromDOM(ch);
+        if (diff >= 0 && (after ? diff <= width : diff < width)) return { node: ch, offset: i, innerOffset: diff };
       } else {
         var result = search(ch);
         if (result) return result;
@@ -4365,12 +4384,12 @@ function leafAt(node, offset) {
     var child = node.firstChild;
     if (!child) return { node: node, offset: offset };
     if (child.nodeType != 1) return { node: child, offset: offset };
-    if (child.hasAttribute("pm-span-offset")) {
+    if (child.hasAttribute("pm-inner-offset")) {
       var nodeOffset = 0;
       for (;;) {
         var nextSib = child.nextSibling,
             nextOffset = undefined;
-        if (!nextSib || (nextOffset = +nextSib.getAttribute("pm-span-offset")) >= offset) break;
+        if (!nextSib || (nextOffset = +nextSib.getAttribute("pm-inner-offset")) >= offset) break;
         child = nextSib;
         nodeOffset = nextOffset;
       }
@@ -4388,11 +4407,11 @@ function leafAt(node, offset) {
  * @return {Object}     The DOM node and character offset inside the node.
  */
 function DOMFromPos(parent, pos) {
-  var node = resolvePath(parent, pos.path);
-  var found = findByOffset(node, pos.offset),
+  var dom = resolvePath(parent, pos.path);
+  var found = findByOffset(dom, pos.offset, true),
       inner = undefined;
-  if (!found) return { node: node, offset: 0 };
-  if (found.node.hasAttribute("pm-span-atom") || !(inner = leafAt(found.node, found.innerOffset))) return { node: found.node.parentNode, offset: found.offset + (found.innerOffset ? 1 : 0) };else return inner;
+  if (!found) return { node: dom, offset: 0 };
+  if (found.node.getAttribute("pm-leaf") == "true" || !(inner = leafAt(found.node, found.innerOffset))) return { node: found.node.parentNode, offset: found.offset + (found.innerOffset ? 1 : 0) };else return inner;
 }
 
 function hasFocus(pm) {
@@ -4482,9 +4501,9 @@ var scrollMargin = 5;
 function scrollIntoView(pm, pos) {
   if (!pos) pos = pm.sel.range.head || pm.sel.range.from;
   var coords = coordsAtPos(pm, pos);
-  for (var _parent3 = pm.content;; _parent3 = _parent3.parentNode) {
-    var atBody = _parent3 == document.body;
-    var rect = atBody ? windowRect() : _parent3.getBoundingClientRect();
+  for (var _parent2 = pm.content;; _parent2 = _parent2.parentNode) {
+    var atBody = _parent2 == document.body;
+    var rect = atBody ? windowRect() : _parent2.getBoundingClientRect();
     var moveX = 0,
         moveY = 0;
     if (coords.top < rect.top) moveY = -(rect.top - coords.top + scrollMargin);else if (coords.bottom > rect.bottom) moveY = coords.bottom - rect.bottom + scrollMargin;
@@ -4492,8 +4511,8 @@ function scrollIntoView(pm, pos) {
     if (moveX || moveY) {
       if (atBody) window.scrollBy(moveX, moveY);
     } else {
-      if (moveY) _parent3.scrollTop += moveY;
-      if (moveX) _parent3.scrollLeft += moveX;
+      if (moveY) _parent2.scrollTop += moveY;
+      if (moveX) _parent2.scrollLeft += moveX;
     }
     if (atBody) break;
   }
@@ -4548,11 +4567,11 @@ function findSelectionIn(doc, path, offset, dir, text) {
   var node = doc.path(path);
   if (node.isTextblock) return new TextSelection(new _model.Pos(path, offset));
 
-  for (var i = offset + (dir > 0 ? 0 : -1); dir > 0 ? i < node.maxOffset : i >= 0; i += dir) {
+  for (var i = offset + (dir > 0 ? 0 : -1); dir > 0 ? i < node.size : i >= 0; i += dir) {
     var child = node.child(i);
     if (!text && child.type.contains == null && child.type.selectable) return new NodeSelection(new _model.Pos(path, i), new _model.Pos(path, i + 1), child);
     path.push(i);
-    var inside = findSelectionIn(doc, path, dir < 0 ? child.maxOffset : 0, dir, text);
+    var inside = findSelectionIn(doc, path, dir < 0 ? child.size : 0, dir, text);
     if (inside) return inside;
     path.pop();
   }
@@ -4586,27 +4605,21 @@ function findSelectionAtStart(node, path, text) {
 function findSelectionAtEnd(node, path, text) {
   if (path === undefined) path = [];
 
-  return findSelectionIn(node, path.slice(), node.maxOffset, -1, text);
+  return findSelectionIn(node, path.slice(), node.size, -1, text);
 }
 
 function selectableNodeAbove(pm, dom, coords, liberal) {
   for (; dom && dom != pm.content; dom = dom.parentNode) {
-    if (dom.hasAttribute("pm-path")) {
-      var path = pathFromNode(dom);
+    if (dom.hasAttribute("pm-offset")) {
+      var path = pathFromDOM(dom);
       var node = pm.doc.path(path);
-      // Leaf nodes are implicitly clickable
       if (node.type.clicked) {
         var result = node.type.clicked(node, path, dom, coords);
         if (result) return result;
       }
+      // Leaf nodes are implicitly clickable
       if ((liberal || node.type.contains == null) && node.type.selectable) return _model.Pos.from(path);
       return null;
-    } else if (dom.hasAttribute("pm-span-atom")) {
-      var path = pathFromNode(dom.parentNode);
-      var _parent4 = pm.doc.path(path),
-          span = parseSpan(dom.getAttribute("pm-span"));
-      var node = _parent4.childAfter(span.from).node;
-      return node.type.selectable ? new _model.Pos(path, span.from) : null;
     }
   }
 }
@@ -4615,6 +4628,7 @@ function verticalMotionLeavesTextblock(pm, pos, dir) {
   var dom = resolvePath(pm.content, pos.path);
   var coords = coordsAtPos(pm, pos);
   for (var child = dom.firstChild; child; child = child.nextSibling) {
+    if (child.nodeType != 1) continue;
     var boxes = child.getClientRects();
     for (var i = 0; i < boxes.length; i++) {
       var box = boxes[i];
@@ -4638,7 +4652,7 @@ function setDOMSelectionToPos(pm, pos) {
   sel.addRange(range);
 }
 
-},{"../dom":3,"../model":26}],19:[function(require,module,exports){
+},{"../dom":3,"../model":27}],19:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -4866,7 +4880,7 @@ function resolveIcon(pm, command) {
       return (0, _icons.getIcon)(command.name, icon);
     }
   }
-  return (0, _dom.elt)("span", null, "?"); // FIXME saner default?
+  return (0, _icons.getIcon)("default", { text: "✘" });
 }
 
 function renderSelect(item, menu) {
@@ -5113,7 +5127,7 @@ var MenuBar = (function () {
     this.wrapper = (0, _dom.elt)("div", { "class": "ProseMirror-menubar" }, (0, _dom.elt)("div", { "class": "ProseMirror-menu", style: "visibility: hiffdden; z-index: 100" }, (0, _dom.elt)("span", { "class": "ProseMirror-menuicon" }, (0, _dom.elt)("div", { "class": "ProseMirror-icon" }, "x"))), this.menuElt);
     pm.wrapper.insertBefore(this.wrapper, pm.wrapper.firstChild);
 
-    this.update = new _update.MenuUpdate(pm, "selectionChange change activeStyleChange", function () {
+    this.update = new _update.MenuUpdate(pm, "selectionChange change activeMarkChange", function () {
       return _this.prepareUpdate();
     });
     this.menu = new _menu.Menu(pm, new BarDisplay(this.menuElt, function () {
@@ -5462,6 +5476,8 @@ function _inherits(subClass, superClass) { if (typeof superClass !== "function" 
 
 var _schema = require("./schema");
 
+// ;; The default top-level document node type.
+
 var Doc = (function (_Block) {
   _inherits(Doc, _Block);
 
@@ -5470,6 +5486,8 @@ var Doc = (function (_Block) {
 
     _get(Object.getPrototypeOf(Doc.prototype), "constructor", this).apply(this, arguments);
   }
+
+  // ;; The default blockquote node type.
 
   _createClass(Doc, null, [{
     key: "kind",
@@ -5492,6 +5510,9 @@ var BlockQuote = (function (_Block2) {
     _get(Object.getPrototypeOf(BlockQuote.prototype), "constructor", this).apply(this, arguments);
   }
 
+  // ;; The default ordered list node type. Has a single attribute,
+  // `order`, which determines the number at which the list starts
+  // counting, and defaults to 1.
   return BlockQuote;
 })(_schema.Block);
 
@@ -5520,6 +5541,8 @@ exports.OrderedList = OrderedList;
 
 OrderedList.attributes = { order: new _schema.Attribute({ "default": "1" }) };
 
+// ;; The default bullet list node type.
+
 var BulletList = (function (_Block4) {
   _inherits(BulletList, _Block4);
 
@@ -5528,6 +5551,8 @@ var BulletList = (function (_Block4) {
 
     _get(Object.getPrototypeOf(BulletList.prototype), "constructor", this).apply(this, arguments);
   }
+
+  // ;; The default list item node type.
 
   _createClass(BulletList, null, [{
     key: "contains",
@@ -5550,6 +5575,8 @@ var ListItem = (function (_Block5) {
     _get(Object.getPrototypeOf(ListItem.prototype), "constructor", this).apply(this, arguments);
   }
 
+  // ;; The default horizontal rule node type.
+
   _createClass(ListItem, null, [{
     key: "kind",
     get: function get() {
@@ -5570,6 +5597,9 @@ var HorizontalRule = (function (_Block6) {
 
     _get(Object.getPrototypeOf(HorizontalRule.prototype), "constructor", this).apply(this, arguments);
   }
+
+  // ;; The default heading node type. Has a single attribute `level`,
+  // which indicates the heading level, and defaults to 1.
 
   _createClass(HorizontalRule, null, [{
     key: "contains",
@@ -5599,6 +5629,9 @@ exports.Heading = Heading;
 
 Heading.attributes = { level: new _schema.Attribute({ "default": "1" }) };
 
+// ;; The default code block / listing node type. Only allows unmarked
+// text nodes inside of it.
+
 var CodeBlock = (function (_Textblock2) {
   _inherits(CodeBlock, _Textblock2);
 
@@ -5608,8 +5641,10 @@ var CodeBlock = (function (_Textblock2) {
     _get(Object.getPrototypeOf(CodeBlock.prototype), "constructor", this).apply(this, arguments);
   }
 
+  // ;; The default paragraph node type.
+
   _createClass(CodeBlock, [{
-    key: "containsStyles",
+    key: "containsMarks",
     get: function get() {
       return false;
     }
@@ -5638,6 +5673,12 @@ var Paragraph = (function (_Textblock3) {
 
     _get(Object.getPrototypeOf(Paragraph.prototype), "constructor", this).apply(this, arguments);
   }
+
+  // ;; The default inline image node type. Has these attributes:
+  //
+  // - **`src`** (required): The URL of the image.
+  // - **`alt`**: The alt text.
+  // - **`title`**: The title of the image.
 
   _createClass(Paragraph, [{
     key: "defaultTextblock",
@@ -5671,6 +5712,8 @@ Image.attributes = {
   title: new _schema.Attribute({ "default": "" })
 };
 
+// ;; The default hardbreak node type.
+
 var HardBreak = (function (_Inline2) {
   _inherits(HardBreak, _Inline2);
 
@@ -5680,12 +5723,19 @@ var HardBreak = (function (_Inline2) {
     _get(Object.getPrototypeOf(HardBreak.prototype), "constructor", this).apply(this, arguments);
   }
 
-  // Style types
+  // Mark types
+
+  // ;; The default emphasis mark type.
 
   _createClass(HardBreak, [{
     key: "selectable",
     get: function get() {
       return false;
+    }
+  }, {
+    key: "isBR",
+    get: function get() {
+      return true;
     }
   }]);
 
@@ -5694,84 +5744,96 @@ var HardBreak = (function (_Inline2) {
 
 exports.HardBreak = HardBreak;
 
-var EmStyle = (function (_StyleType) {
-  _inherits(EmStyle, _StyleType);
+var EmMark = (function (_MarkType) {
+  _inherits(EmMark, _MarkType);
 
-  function EmStyle() {
-    _classCallCheck(this, EmStyle);
+  function EmMark() {
+    _classCallCheck(this, EmMark);
 
-    _get(Object.getPrototypeOf(EmStyle.prototype), "constructor", this).apply(this, arguments);
+    _get(Object.getPrototypeOf(EmMark.prototype), "constructor", this).apply(this, arguments);
   }
 
-  _createClass(EmStyle, null, [{
+  // ;; The default strong mark type.
+
+  _createClass(EmMark, null, [{
     key: "rank",
     get: function get() {
       return 51;
     }
   }]);
 
-  return EmStyle;
-})(_schema.StyleType);
+  return EmMark;
+})(_schema.MarkType);
 
-exports.EmStyle = EmStyle;
+exports.EmMark = EmMark;
 
-var StrongStyle = (function (_StyleType2) {
-  _inherits(StrongStyle, _StyleType2);
+var StrongMark = (function (_MarkType2) {
+  _inherits(StrongMark, _MarkType2);
 
-  function StrongStyle() {
-    _classCallCheck(this, StrongStyle);
+  function StrongMark() {
+    _classCallCheck(this, StrongMark);
 
-    _get(Object.getPrototypeOf(StrongStyle.prototype), "constructor", this).apply(this, arguments);
+    _get(Object.getPrototypeOf(StrongMark.prototype), "constructor", this).apply(this, arguments);
   }
 
-  _createClass(StrongStyle, null, [{
+  // ;; The default link mark type. Has these attributes:
+  //
+  // - **`href`** (required): The link target.
+  // - **`title`**: The link's title.
+
+  _createClass(StrongMark, null, [{
     key: "rank",
     get: function get() {
       return 52;
     }
   }]);
 
-  return StrongStyle;
-})(_schema.StyleType);
+  return StrongMark;
+})(_schema.MarkType);
 
-exports.StrongStyle = StrongStyle;
+exports.StrongMark = StrongMark;
 
-var LinkStyle = (function (_StyleType3) {
-  _inherits(LinkStyle, _StyleType3);
+var LinkMark = (function (_MarkType3) {
+  _inherits(LinkMark, _MarkType3);
 
-  function LinkStyle() {
-    _classCallCheck(this, LinkStyle);
+  function LinkMark() {
+    _classCallCheck(this, LinkMark);
 
-    _get(Object.getPrototypeOf(LinkStyle.prototype), "constructor", this).apply(this, arguments);
+    _get(Object.getPrototypeOf(LinkMark.prototype), "constructor", this).apply(this, arguments);
   }
 
-  _createClass(LinkStyle, null, [{
+  _createClass(LinkMark, null, [{
     key: "rank",
     get: function get() {
       return 53;
     }
   }]);
 
-  return LinkStyle;
-})(_schema.StyleType);
+  return LinkMark;
+})(_schema.MarkType);
 
-exports.LinkStyle = LinkStyle;
+exports.LinkMark = LinkMark;
 
-LinkStyle.attributes = {
+LinkMark.attributes = {
   href: new _schema.Attribute(),
   title: new _schema.Attribute({ "default": "" })
 };
 
-var CodeStyle = (function (_StyleType4) {
-  _inherits(CodeStyle, _StyleType4);
+// ;; The default code font mark type.
 
-  function CodeStyle() {
-    _classCallCheck(this, CodeStyle);
+var CodeMark = (function (_MarkType4) {
+  _inherits(CodeMark, _MarkType4);
 
-    _get(Object.getPrototypeOf(CodeStyle.prototype), "constructor", this).apply(this, arguments);
+  function CodeMark() {
+    _classCallCheck(this, CodeMark);
+
+    _get(Object.getPrototypeOf(CodeMark.prototype), "constructor", this).apply(this, arguments);
   }
 
-  _createClass(CodeStyle, [{
+  // :: SchemaSpec
+  // The specification for the default schema.
+
+  _createClass(CodeMark, [{
     key: "isCode",
     get: function get() {
       return true;
@@ -5783,11 +5845,10 @@ var CodeStyle = (function (_StyleType4) {
     }
   }]);
 
-  return CodeStyle;
-})(_schema.StyleType);
+  return CodeMark;
+})(_schema.MarkType);
 
-exports.CodeStyle = CodeStyle;
-
+exports.CodeMark = CodeMark;
 var defaultSpec = new _schema.SchemaSpec({
   doc: Doc,
   blockquote: BlockQuote,
@@ -5804,16 +5865,18 @@ var defaultSpec = new _schema.SchemaSpec({
   image: Image,
   hard_break: HardBreak
 }, {
-  em: EmStyle,
-  strong: StrongStyle,
-  link: LinkStyle,
-  code: CodeStyle
+  em: EmMark,
+  strong: StrongMark,
+  link: LinkMark,
+  code: CodeMark
 });
 
+// :: Schema
+// ProseMirror's default document schema.
 var defaultSchema = new _schema.Schema(defaultSpec);
 exports.defaultSchema = defaultSchema;
 
-},{"./schema":29}],25:[function(require,module,exports){
+},{"./schema":31}],25:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -5824,90 +5887,781 @@ exports.findDiffEnd = findDiffEnd;
 
 var _pos = require("./pos");
 
-var _style = require("./style");
+// :: (Node, Node) → ?Pos
+// Find the first position at which nodes `a` and `b` differ, or
+// `null` if they are the same.
 
 function findDiffStart(a, b) {
-  var pathA = arguments.length <= 2 || arguments[2] === undefined ? [] : arguments[2];
-  var pathB = arguments.length <= 3 || arguments[3] === undefined ? [] : arguments[3];
+  var path = arguments.length <= 2 || arguments[2] === undefined ? [] : arguments[2];
 
-  var offset = 0;
-  for (var i = 0;; i++) {
-    if (i == a.length || i == b.length) {
-      if (a.length == b.length) return null;
+  var iA = a.iter(),
+      iB = b.iter(),
+      offset = 0;
+  for (;;) {
+    if (iA.atEnd() || iB.atEnd()) {
+      if (a.size == b.size) return null;
       break;
     }
-    var childA = a.child(i),
-        childB = b.child(i);
+
+    var childA = iA.next(),
+        childB = iB.next();
     if (childA == childB) {
-      offset += a.isTextblock ? childA.offset : 1;
-      continue;
+      offset += childA.width;continue;
     }
 
     if (!childA.sameMarkup(childB)) break;
 
-    if (a.isTextblock) {
-      if (!(0, _style.sameStyles)(childA.styles, childB.styles)) break;
-      if (childA.isText && childA.text != childB.text) {
-        for (var j = 0; childA.text[j] == childB.text[j]; j++) {
-          offset++;
-        }break;
-      }
-      offset += childA.offset;
-    } else {
-      var inner = findDiffStart(childA, childB, pathA.concat(i), pathB.concat(i));
-      if (inner) return inner;
-      offset++;
+    if (childA.isText && childA.text != childB.text) {
+      for (var j = 0; childA.text[j] == childB.text[j]; j++) {
+        offset++;
+      }break;
     }
+
+    if (childA.size || childB.size) {
+      path.push(offset);
+      var inner = findDiffStart(childA.content, childB.content, path);
+      if (inner) return inner;
+      path.pop();
+    }
+    offset += childA.width;
   }
-  return { a: new _pos.Pos(pathA, offset), b: new _pos.Pos(pathB, offset) };
+  return new _pos.Pos(path, offset);
 }
+
+// :: (Node, Node) → ?{a: Pos, b: Pos}
+// Find the first position, searching from the end, at which nodes `a`
+// and `b` differ, or `null` if they are the same. Since this position
+// will not be the same in both nodes, an object with two separate
+// positions is returned.
 
 function findDiffEnd(a, b) {
   var pathA = arguments.length <= 2 || arguments[2] === undefined ? [] : arguments[2];
   var pathB = arguments.length <= 3 || arguments[3] === undefined ? [] : arguments[3];
 
-  var iA = a.length,
-      iB = b.length;
-  var offset = 0;
+  var iA = a.reverseIter(),
+      iB = b.reverseIter();
+  var offA = a.size,
+      offB = b.size;
 
-  for (;; iA--, iB--) {
-    if (iA == 0 || iB == 0) {
-      if (iA == iB) return null;
+  for (;;) {
+    if (iA.atEnd() || iB.atEnd()) {
+      if (a.size == b.size) return null;
       break;
     }
-    var childA = a.child(iA - 1),
-        childB = b.child(iB - 1);
+    var childA = iA.next(),
+        childB = iB.next();
     if (childA == childB) {
-      offset += a.isTextblock ? childA.offset : 1;
+      offA -= childA.width;offB -= childB.width;
       continue;
     }
 
     if (!childA.sameMarkup(childB)) break;
 
-    if (a.isTextblock) {
-      if (!(0, _style.sameStyles)(childA.styles, childB.styles)) break;
-
-      if (childA.isText && childA.text != childB.text) {
-        var same = 0,
-            minSize = Math.min(childA.text.length, childB.text.length);
-        while (same < minSize && childA.text[childA.text.length - same - 1] == childB.text[childB.text.length - same - 1]) {
-          same++;
-          offset++;
-        }
-        break;
+    if (childA.isText && childA.text != childB.text) {
+      var same = 0,
+          minSize = Math.min(childA.text.length, childB.text.length);
+      while (same < minSize && childA.text[childA.text.length - same - 1] == childB.text[childB.text.length - same - 1]) {
+        same++;offA--;offB--;
       }
-      offset += childA.offset;
-    } else {
-      var inner = findDiffEnd(childA, childB, pathA.concat(iA - 1), pathB.concat(iB - 1));
+      break;
+    }
+    offA -= childA.width;offB -= childB.width;
+    if (childA.size || childB.size) {
+      pathA.push(offA);pathB.push(offB);
+      var inner = findDiffEnd(childA.content, childB.content, pathA, pathB);
       if (inner) return inner;
-      offset++;
+      pathA.pop();pathB.pop();
     }
   }
-  return { a: new _pos.Pos(pathA, a.maxOffset - offset),
-    b: new _pos.Pos(pathB, b.maxOffset - offset) };
+  return { a: new _pos.Pos(pathA, offA), b: new _pos.Pos(pathB, offB) };
 }
 
-},{"./pos":28,"./style":31}],26:[function(require,module,exports){
+},{"./pos":30}],26:[function(require,module,exports){
+// ;; A fragment is an abstract type used to represent a node's
+// collection of child nodes. It tries to hide considerations about
+// the actual way in which the child nodes are stored, so that
+// different representations (nodes that only contain simple nodes
+// versus nodes that also contain text) can be approached using the
+// same API.
+//
+// Fragments are persistent data structures. That means you should
+// _not_ mutate them or their content, but create new instances
+// whenever needed. The API tries to make this easy.
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _get = function get(_x16, _x17, _x18) { var _again = true; _function: while (_again) { var object = _x16, property = _x17, receiver = _x18; _again = false; if (object === null) object = Function.prototype; var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { _x16 = parent; _x17 = property; _x18 = receiver; _again = true; desc = parent = undefined; continue _function; } } else if ("value" in desc) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } } };
+
+var _createClass = (function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
+
+function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+var Fragment = (function () {
+  function Fragment() {
+    _classCallCheck(this, Fragment);
+  }
+
+  _createClass(Fragment, [{
+    key: "append",
+
+    // :: (Fragment, number, number) → Fragment
+    // Create a fragment that combines this one with another fragment.
+    // Takes care of merging adjacent text nodes and can also merge
+    // “open” nodes at the boundary. `joinLeft` and `joinRight` give the
+    // depth to which the left and right fragments are open. If open
+    // nodes with the same markup are found on both sides, they are
+    // joined. If not, the open nodes are [closed](#Node.close).
+    value: function append(other) {
+      var joinLeft = arguments.length <= 1 || arguments[1] === undefined ? 0 : arguments[1];
+      var joinRight = arguments.length <= 2 || arguments[2] === undefined ? 0 : arguments[2];
+
+      if (!this.size) return joinRight ? other.replace(0, other.firstChild.close(joinRight - 1, "start")) : other;
+      if (!other.size) return joinLeft ? this.replace(this.size - 1, this.lastChild.close(joinLeft - 1, "end")) : this;
+      return this.appendInner(other, joinLeft, joinRight);
+    }
+
+    // :: string
+    // Concatenate all the text nodes found in this fragment and its
+    // childen.
+  }, {
+    key: "toString",
+
+    // :: () → string
+    // Return a debugging string that describes this fragment.
+    value: function toString() {
+      var str = "";
+      this.forEach(function (n) {
+        return str += (str ? ", " : "") + n.toString();
+      });
+      return str;
+    }
+
+    // :: (number, number, ?(Node) → Node) → [Node]
+    // Produce an array with the child nodes between the given
+    // boundaries, optionally mapping a function over them.
+  }, {
+    key: "toArray",
+    value: function toArray(from, to, f) {
+      if (from === undefined) from = 0;
+      if (to === undefined) to = this.size;
+
+      var result = [];
+      for (var iter = this.iter(from, to), n = undefined; n = iter.next().value;) {
+        result.push(f ? f(n) : n);
+      }return result;
+    }
+
+    // :: ((Node) → Node) → Fragment
+    // Produce a new Fragment by mapping all this fragment's children
+    // through a function.
+  }, {
+    key: "map",
+    value: function map(f) {
+      // FIXME join text nodes?
+      return Fragment.fromArray(this.toArray(undefined, undefined, f));
+    }
+
+    // :: ((Node) → bool) → bool
+    // Returns `true` if the given function returned `true` for any of
+    // the fragment's children.
+  }, {
+    key: "some",
+    value: function some(f) {
+      for (var iter = this.iter(), n = undefined; n = iter.next().value;) {
+        if (f(n)) return n;
+      }
+    }
+  }, {
+    key: "close",
+    value: function close(depth, side) {
+      var child = side == "start" ? this.firstChild : this.lastChild;
+      var closed = child.close(depth - 1, side);
+      if (closed == child) return this;
+      return this.replace(side == "start" ? 0 : this.size - 1, closed);
+    }
+  }, {
+    key: "nodesBetween",
+    value: function nodesBetween(from, to, f, path, parent) {
+      var moreFrom = from && from.depth > path.length,
+          moreTo = to && to.depth > path.length;
+      var start = moreFrom ? from.path[path.length] : from ? from.offset : 0;
+      var end = moreTo ? to.path[path.length] + 1 : to ? to.offset : this.size;
+      for (var iter = this.iter(start, end), node = undefined; node = iter.next().value;) {
+        var startOffset = iter.offset - node.width;
+        path.push(startOffset);
+        node.nodesBetween(moreFrom && startOffset == start ? from : null, moreTo && iter.offset == end ? to : null, f, path, parent);
+        path.pop();
+      }
+    }
+
+    // :: (?Pos, ?Pos) → Fragment
+    // Slice out the sub-fragment between the two given positions.
+    // `null` can be passed for either to indicate the slice should go
+    // all the way to the start or end of the fragment.
+  }, {
+    key: "sliceBetween",
+    value: function sliceBetween(from, to) {
+      var depth = arguments.length <= 2 || arguments[2] === undefined ? 0 : arguments[2];
+
+      var moreFrom = from && from.depth > depth,
+          moreTo = to && to.depth > depth;
+      var start = moreFrom ? from.path[depth] : from ? from.offset : 0;
+      var end = moreTo ? to.path[depth] + 1 : to ? to.offset : this.size;
+      var nodes = [];
+      for (var iter = this.iter(start, end), node = undefined; node = iter.next().value;) {
+        var passFrom = moreFrom && iter.offset - node.width == start ? from : null;
+        var passTo = moreTo && iter.offset == end ? to : null;
+        if (passFrom || passTo) node = node.sliceBetween(passFrom, passTo, depth + 1);
+        nodes.push(node);
+      }
+      return new this.constructor(nodes);
+    }
+
+    // :: (Schema, Object) → Fragment
+    // Deserialize a fragment from its JSON representation.
+  }, {
+    key: "textContent",
+    get: function get() {
+      var text = "";
+      this.forEach(function (n) {
+        return text += n.textContent;
+      });
+      return text;
+    }
+  }], [{
+    key: "fromJSON",
+    value: function fromJSON(schema, value) {
+      return value ? this.fromArray(value.map(schema.nodeFromJSON)) : emptyFragment;
+    }
+
+    // :: ([Node]) → Fragment
+    // Build a fragment from an array of nodes.
+  }, {
+    key: "fromArray",
+    value: function fromArray(array) {
+      if (!array.length) return emptyFragment;
+      var hasText = false;
+      for (var i = 0; i < array.length; i++) {
+        if (array[i].isText) hasText = true;
+      }return new (hasText ? TextFragment : FlatFragment)(array);
+    }
+
+    // :: (?union<Fragment, Node, [Node]>) → Fragment
+    // Create a fragment from something that can be interpreted as a set
+    // of nodes. For `null`, it returns the empty fragment. For a
+    // fragment, the fragment itself. For a node or array of nodes, a
+    // fragment containing those nodes.
+  }, {
+    key: "from",
+    value: function from(nodes) {
+      if (!nodes) return emptyFragment;
+      if (nodes instanceof Fragment) return nodes;
+      return this.fromArray(Array.isArray(nodes) ? nodes : [nodes]);
+    }
+  }]);
+
+  return Fragment;
+})();
+
+exports.Fragment = Fragment;
+
+var iterEnd = { done: true };
+
+var FlatIterator = (function () {
+  function FlatIterator(array, pos, end) {
+    _classCallCheck(this, FlatIterator);
+
+    this.array = array;
+    this.pos = pos;
+    this.end = end;
+  }
+
+  _createClass(FlatIterator, [{
+    key: "copy",
+    value: function copy() {
+      return new this.constructor(this.array, this.pos, this.end);
+    }
+  }, {
+    key: "atEnd",
+    value: function atEnd() {
+      return this.pos == this.end;
+    }
+  }, {
+    key: "next",
+    value: function next() {
+      return this.pos == this.end ? iterEnd : this.array[this.pos++];
+    }
+  }, {
+    key: "offset",
+    get: function get() {
+      return this.pos;
+    }
+  }]);
+
+  return FlatIterator;
+})();
+
+var ReverseFlatIterator = (function (_FlatIterator) {
+  _inherits(ReverseFlatIterator, _FlatIterator);
+
+  function ReverseFlatIterator() {
+    _classCallCheck(this, ReverseFlatIterator);
+
+    _get(Object.getPrototypeOf(ReverseFlatIterator.prototype), "constructor", this).apply(this, arguments);
+  }
+
+  // ;; #forward=Fragment
+
+  _createClass(ReverseFlatIterator, [{
+    key: "next",
+    value: function next() {
+      return this.pos == this.end ? iterEnd : this.array[--this.pos];
+    }
+  }]);
+
+  return ReverseFlatIterator;
+})(FlatIterator);
+
+var FlatFragment = (function (_Fragment) {
+  _inherits(FlatFragment, _Fragment);
+
+  function FlatFragment(content) {
+    _classCallCheck(this, FlatFragment);
+
+    _get(Object.getPrototypeOf(FlatFragment.prototype), "constructor", this).call(this);
+    this.content = content;
+  }
+
+  // :: Fragment
+  // An empty fragment. Intended to be reused whenever a node doesn't
+  // contain anything (rather than allocating a new empty fragment for
+  // each leaf node).
+
+  // :: (?number, ?number) → Iterator<Node>
+  // Create a forward iterator over the content of the fragment. An
+  // explicit start and end offset can be given to have the iterator
+  // go over only part of the content. If an iteration bound falls
+  // within a text node, only the part that is within the bounds is
+  // yielded.
+
+  _createClass(FlatFragment, [{
+    key: "iter",
+    value: function iter() {
+      var start = arguments.length <= 0 || arguments[0] === undefined ? 0 : arguments[0];
+      var end = arguments.length <= 1 || arguments[1] === undefined ? this.size : arguments[1];
+
+      return new FlatIterator(this.content, start, end);
+    }
+
+    // :: (?number, ?number) → Iterator<Node>
+    // Create a reverse iterator over the content of the fragment. An
+    // explicit start and end offset can be given to have the iterator
+    // go over only part of the content. **Note**: `start` should be
+    // greater than `end`, when passed.
+  }, {
+    key: "reverseIter",
+    value: function reverseIter() {
+      var start = arguments.length <= 0 || arguments[0] === undefined ? this.size : arguments[0];
+      var end = arguments.length <= 1 || arguments[1] === undefined ? 0 : arguments[1];
+
+      return new ReverseFlatIterator(this.content, start, end);
+    }
+
+    // :: number
+    // The maximum offset in this fragment.
+  }, {
+    key: "child",
+
+    // :: (number) → Node
+    // Get the child at the given offset. Might return a text node that
+    // stretches before and/or after the offset.
+    value: function child(off) {
+      if (off < 0 || off >= this.content.length) throw new Error("Offset " + off + " out of range");
+      return this.content[off];
+    }
+
+    // :: ((node: Node, start: number, end: number))
+    // Call the given function for each node in the fragment, passing it
+    // the node, its start offset, and its end offset.
+  }, {
+    key: "forEach",
+    value: function forEach(f) {
+      for (var i = 0; i < this.content.length; i++) {
+        f(this.content[i], i, i + 1);
+      }
+    }
+
+    // :: (number) → {start: number, node: Node}
+    // Find the node before the given offset. Returns an object
+    // containing the node as well as its start index. Offset should be
+    // greater than zero.
+  }, {
+    key: "chunkBefore",
+    value: function chunkBefore(off) {
+      return { node: this.child(off - 1), start: off - 1 };
+    }
+
+    // :: (number) → {start: number, node: Node}
+    // Find the node after the given offset. Returns an object
+    // containing the node as well as its start index. Offset should be
+    // less than the fragment's size.
+  }, {
+    key: "chunkAfter",
+    value: function chunkAfter(off) {
+      return { node: this.child(off), start: off };
+    }
+
+    // :: (number, ?number) → Fragment
+    // Return a fragment with only the nodes between the given offsets.
+    // When `to` is not given, the slice will go to the end of the
+    // fragment.
+  }, {
+    key: "slice",
+    value: function slice(from) {
+      var to = arguments.length <= 1 || arguments[1] === undefined ? this.size : arguments[1];
+
+      if (from == to) return emptyFragment;
+      return new FlatFragment(this.content.slice(from, to));
+    }
+
+    // :: (number, Node) → Fragment
+    // Return a fragment in which the node at the given offset is
+    // replaced by the given node. The node, as well as the one it
+    // replaces, should not be text nodes.
+  }, {
+    key: "replace",
+    value: function replace(offset, node) {
+      if (node.isText) throw new Error("Argument to replace should be a non-text node");
+      var copy = this.content.slice();
+      copy[offset] = node;
+      return new FlatFragment(copy);
+    }
+  }, {
+    key: "appendInner",
+    value: function appendInner(other, joinLeft, joinRight) {
+      var last = this.content.length - 1,
+          content = this.content.slice(0, last);
+      var before = this.content[last],
+          after = other.firstChild;
+      if (joinLeft > 0 && joinRight > 0 && before.sameMarkup(after)) content.push(before.append(after.content, joinLeft - 1, joinRight - 1));else content.push(before.close(joinLeft - 1, "end"), after.close(joinRight - 1, "start"));
+      return Fragment.fromArray(content.concat(other.toArray(after.width)));
+    }
+
+    // :: () → Object
+    // Create a JSON-serializeable representation of this fragment.
+  }, {
+    key: "toJSON",
+    value: function toJSON() {
+      return this.content.map(function (n) {
+        return n.toJSON();
+      });
+    }
+  }, {
+    key: "size",
+    get: function get() {
+      return this.content.length;
+    }
+
+    // :: ?Node
+    // The first child of the fragment, or `null` if it is empty.
+  }, {
+    key: "firstChild",
+    get: function get() {
+      return this.content.length ? this.content[0] : null;
+    }
+
+    // :: ?Node
+    // The last child of the fragment, or `null` if it is empty.
+  }, {
+    key: "lastChild",
+    get: function get() {
+      return this.content.length ? this.content[this.content.length - 1] : null;
+    }
+  }]);
+
+  return FlatFragment;
+})(Fragment);
+
+var emptyFragment = new FlatFragment([]);
+
+exports.emptyFragment = emptyFragment;
+
+var TextIterator = (function () {
+  function TextIterator(fragment, startOffset, endOffset) {
+    var pos = arguments.length <= 3 || arguments[3] === undefined ? -1 : arguments[3];
+
+    _classCallCheck(this, TextIterator);
+
+    this.frag = fragment;
+    this.offset = startOffset;
+    this.pos = pos;
+    this.endOffset = endOffset;
+  }
+
+  _createClass(TextIterator, [{
+    key: "copy",
+    value: function copy() {
+      return new this.constructor(this.frag, this.offset, this.endOffset, this.pos);
+    }
+  }, {
+    key: "atEnd",
+    value: function atEnd() {
+      return this.offset == this.endOffset;
+    }
+  }, {
+    key: "next",
+    value: function next() {
+      if (this.pos == -1) {
+        var start = this.init();
+        if (start) return start;
+      }
+      return this.offset == this.endOffset ? iterEnd : this.advance();
+    }
+  }, {
+    key: "advance",
+    value: function advance() {
+      var node = this.frag.content[this.pos++],
+          end = this.offset + node.width;
+      if (end > this.endOffset) {
+        node = node.copy(node.text.slice(0, this.endOffset - this.offset));
+        this.offset = this.endOffset;
+        return node;
+      }
+      this.offset = end;
+      return node;
+    }
+  }, {
+    key: "init",
+    value: function init() {
+      this.pos = 0;
+      var offset = 0;
+      while (offset < this.offset) {
+        var node = this.frag.content[this.pos++],
+            end = offset + node.width;
+        if (end == this.offset) break;
+        if (end > this.offset) {
+          var sliceEnd = node.width;
+          if (end > this.endOffset) {
+            sliceEnd = this.endOffset - offset;
+            end = this.endOffset;
+          }
+          node = node.copy(node.text.slice(this.offset - offset, sliceEnd));
+          this.offset = end;
+          return node;
+        }
+        offset = end;
+      }
+    }
+  }]);
+
+  return TextIterator;
+})();
+
+var ReverseTextIterator = (function (_TextIterator) {
+  _inherits(ReverseTextIterator, _TextIterator);
+
+  function ReverseTextIterator() {
+    _classCallCheck(this, ReverseTextIterator);
+
+    _get(Object.getPrototypeOf(ReverseTextIterator.prototype), "constructor", this).apply(this, arguments);
+  }
+
+  _createClass(ReverseTextIterator, [{
+    key: "advance",
+    value: function advance() {
+      var node = this.frag.content[--this.pos],
+          end = this.offset - node.width;
+      if (end < this.endOffset) {
+        node = node.copy(node.text.slice(this.endOffset - end));
+        this.offset = this.endOffset;
+        return node;
+      }
+      this.offset = end;
+      return node;
+    }
+  }, {
+    key: "init",
+    value: function init() {
+      this.pos = this.frag.content.length;
+      var offset = this.frag.size;
+      while (offset > this.offset) {
+        var node = this.frag.content[--this.pos],
+            end = offset - node.width;
+        if (end == this.offset) break;
+        if (end < this.offset) {
+          if (end < this.endOffset) {
+            node = node.copy(node.text.slice(this.endOffset - end, this.offset - end));
+            end = this.endOffset;
+          } else {
+            node = node.copy(node.text.slice(0, this.offset - end));
+          }
+          this.offset = end;
+          return node;
+        }
+        offset = end;
+      }
+    }
+  }]);
+
+  return ReverseTextIterator;
+})(TextIterator);
+
+var TextFragment = (function (_Fragment2) {
+  _inherits(TextFragment, _Fragment2);
+
+  function TextFragment(content, size) {
+    _classCallCheck(this, TextFragment);
+
+    _get(Object.getPrototypeOf(TextFragment.prototype), "constructor", this).call(this);
+    this.content = content;
+    this.size = size || 0;
+    if (size == null) for (var i = 0; i < content.length; i++) {
+      this.size += content[i].width;
+    }
+  }
+
+  _createClass(TextFragment, [{
+    key: "iter",
+    value: function iter() {
+      var from = arguments.length <= 0 || arguments[0] === undefined ? 0 : arguments[0];
+      var to = arguments.length <= 1 || arguments[1] === undefined ? this.size : arguments[1];
+
+      return new TextIterator(this, from, to);
+    }
+  }, {
+    key: "reverseIter",
+    value: function reverseIter() {
+      var from = arguments.length <= 0 || arguments[0] === undefined ? this.size : arguments[0];
+      var to = arguments.length <= 1 || arguments[1] === undefined ? 0 : arguments[1];
+
+      return new ReverseTextIterator(this, from, to);
+    }
+  }, {
+    key: "child",
+    value: function child(off) {
+      if (off < 0 || off >= this.size) throw new Error("Offset " + off + " out of range");
+      for (var i = 0, curOff = 0; i < this.content.length; i++) {
+        var child = this.content[i];
+        curOff += child.width;
+        if (curOff > off) return child;
+      }
+    }
+  }, {
+    key: "forEach",
+    value: function forEach(f) {
+      for (var i = 0, off = 0; i < this.content.length; i++) {
+        var child = this.content[i];
+        f(child, off, off += child.width);
+      }
+    }
+  }, {
+    key: "chunkBefore",
+    value: function chunkBefore(off) {
+      if (!off) throw new Error("No chunk before start of node");
+      for (var i = 0, curOff = 0; i < this.content.length; i++) {
+        var child = this.content[i],
+            end = curOff + child.width;
+        if (end >= off) return { node: child, start: curOff };
+        curOff = end;
+      }
+    }
+  }, {
+    key: "chunkAfter",
+    value: function chunkAfter(off) {
+      if (off == this.size) throw new Error("No chunk after end of node");
+      for (var i = 0, curOff = 0; i < this.content.length; i++) {
+        var child = this.content[i],
+            end = curOff + child.width;
+        if (end > off) return { node: child, start: curOff };
+        curOff = end;
+      }
+    }
+  }, {
+    key: "slice",
+    value: function slice() {
+      var from = arguments.length <= 0 || arguments[0] === undefined ? 0 : arguments[0];
+      var to = arguments.length <= 1 || arguments[1] === undefined ? this.size : arguments[1];
+
+      if (from == to) return emptyFragment;
+      return new TextFragment(this.toArray(from, to));
+    }
+  }, {
+    key: "replace",
+    value: function replace(off, node) {
+      if (node.isText) throw new Error("Argument to replace should be a non-text node");
+      var curNode = undefined,
+          index = undefined;
+      for (var curOff = 0; curOff < off; index++) {
+        curNode = this.content[index];
+        curOff += curNode.width;
+      }
+      if (curNode.isText) throw new Error("Can not replace text content with replace method");
+      var copy = this.content.slice();
+      copy[index] = node;
+      return new TextFragment(copy);
+    }
+  }, {
+    key: "appendInner",
+    value: function appendInner(other, joinLeft, joinRight) {
+      var last = this.content.length - 1,
+          content = this.content.slice(0, last);
+      var before = this.content[last],
+          after = other.firstChild;
+      var same = before.sameMarkup(after);
+      if (same && before.isText) content.push(before.copy(before.text + after.text));else if (same && joinLeft > 0 && joinRight > 0) content.push(before.append(after.content, joinLeft - 1, joinRight - 1));else content.push(before.close(joinLeft - 1, "end"), after.close(joinRight - 1, "start"));
+      return Fragment.fromArray(content.concat(other.toArray(after.width)));
+    }
+  }, {
+    key: "toJSON",
+    value: function toJSON() {
+      return this.content.map(function (n) {
+        return n.toJSON();
+      });
+    }
+  }, {
+    key: "firstChild",
+    get: function get() {
+      return this.size ? this.content[0] : null;
+    }
+  }, {
+    key: "lastChild",
+    get: function get() {
+      return this.size ? this.content[this.content.length - 1] : null;
+    }
+  }]);
+
+  return TextFragment;
+})(Fragment);
+
+if (typeof Symbol != "undefined") {
+  // :: () → Iterator<Node>
+  // A fragment is iterable, in the ES6 sense.
+  Fragment.prototype[Symbol.iterator] = function () {
+    return this.iter();
+  };
+  FlatIterator.prototype[Symbol.iterator] = TextIterator.prototype[Symbol.iterator] = function () {
+    return this;
+  };
+}
+
+},{}],27:[function(require,module,exports){
+// !!
+// This module defines ProseMirror's document model, the data
+// structure used to define and inspect content documents. It
+// includes:
+//
+// * The [node](#Node) type that represents document elements
+//
+// * The [schema](#Schema) types used to tag and constrain the
+//   document structure
+//
+// * The data type for document [positions](#Pos)
+
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -5916,43 +6670,34 @@ Object.defineProperty(exports, "__esModule", {
 
 var _node = require("./node");
 
-Object.defineProperty(exports, "compareMarkup", {
+Object.defineProperty(exports, "Node", {
         enumerable: true,
         get: function get() {
-                return _node.compareMarkup;
+                return _node.Node;
         }
 });
 
-var _style = require("./style");
+var _fragment = require("./fragment");
 
-Object.defineProperty(exports, "removeStyle", {
+Object.defineProperty(exports, "Fragment", {
         enumerable: true,
         get: function get() {
-                return _style.removeStyle;
+                return _fragment.Fragment;
         }
 });
-Object.defineProperty(exports, "sameStyles", {
+Object.defineProperty(exports, "emptyFragment", {
         enumerable: true,
         get: function get() {
-                return _style.sameStyles;
+                return _fragment.emptyFragment;
         }
 });
-Object.defineProperty(exports, "containsStyle", {
+
+var _mark = require("./mark");
+
+Object.defineProperty(exports, "Mark", {
         enumerable: true,
         get: function get() {
-                return _style.containsStyle;
-        }
-});
-Object.defineProperty(exports, "spanStylesAt", {
-        enumerable: true,
-        get: function get() {
-                return _style.spanStylesAt;
-        }
-});
-Object.defineProperty(exports, "rangeHasStyle", {
-        enumerable: true,
-        get: function get() {
-                return _style.rangeHasStyle;
+                return _mark.Mark;
         }
 });
 
@@ -6006,10 +6751,10 @@ Object.defineProperty(exports, "Text", {
                 return _schema.Text;
         }
 });
-Object.defineProperty(exports, "StyleType", {
+Object.defineProperty(exports, "MarkType", {
         enumerable: true,
         get: function get() {
-                return _schema.StyleType;
+                return _schema.MarkType;
         }
 });
 Object.defineProperty(exports, "Attribute", {
@@ -6093,28 +6838,28 @@ Object.defineProperty(exports, "HardBreak", {
                 return _defaultschema.HardBreak;
         }
 });
-Object.defineProperty(exports, "CodeStyle", {
+Object.defineProperty(exports, "CodeMark", {
         enumerable: true,
         get: function get() {
-                return _defaultschema.CodeStyle;
+                return _defaultschema.CodeMark;
         }
 });
-Object.defineProperty(exports, "EmStyle", {
+Object.defineProperty(exports, "EmMark", {
         enumerable: true,
         get: function get() {
-                return _defaultschema.EmStyle;
+                return _defaultschema.EmMark;
         }
 });
-Object.defineProperty(exports, "StrongStyle", {
+Object.defineProperty(exports, "StrongMark", {
         enumerable: true,
         get: function get() {
-                return _defaultschema.StrongStyle;
+                return _defaultschema.StrongMark;
         }
 });
-Object.defineProperty(exports, "LinkStyle", {
+Object.defineProperty(exports, "LinkMark", {
         enumerable: true,
         get: function get() {
-                return _defaultschema.LinkStyle;
+                return _defaultschema.LinkMark;
         }
 });
 
@@ -6126,49 +6871,10 @@ Object.defineProperty(exports, "Pos", {
                 return _pos.Pos;
         }
 });
-
-var _slice = require("./slice");
-
-Object.defineProperty(exports, "sliceBefore", {
-        enumerable: true,
-        get: function get() {
-                return _slice.sliceBefore;
-        }
-});
-Object.defineProperty(exports, "sliceAfter", {
-        enumerable: true,
-        get: function get() {
-                return _slice.sliceAfter;
-        }
-});
-Object.defineProperty(exports, "sliceBetween", {
-        enumerable: true,
-        get: function get() {
-                return _slice.sliceBetween;
-        }
-});
-Object.defineProperty(exports, "childrenBefore", {
-        enumerable: true,
-        get: function get() {
-                return _slice.childrenBefore;
-        }
-});
-Object.defineProperty(exports, "childrenAfter", {
-        enumerable: true,
-        get: function get() {
-                return _slice.childrenAfter;
-        }
-});
-Object.defineProperty(exports, "childrenBetween", {
-        enumerable: true,
-        get: function get() {
-                return _slice.childrenBetween;
-        }
-});
 Object.defineProperty(exports, "siblingRange", {
         enumerable: true,
         get: function get() {
-                return _slice.siblingRange;
+                return _pos.siblingRange;
         }
 });
 
@@ -6187,135 +6893,332 @@ Object.defineProperty(exports, "findDiffEnd", {
         }
 });
 
-},{"./defaultschema":24,"./diff":25,"./node":27,"./pos":28,"./schema":29,"./slice":30,"./style":31}],27:[function(require,module,exports){
+},{"./defaultschema":24,"./diff":25,"./fragment":26,"./mark":28,"./node":29,"./pos":30,"./schema":31}],28:[function(require,module,exports){
+// ;; A mark is a piece of information that can be attached to a node,
+// such as it being empasized, in code font, or a link. It has a type
+// and optionally a set of attributes that provide further information
+// (such as the target of the link). Marks are created through a
+// [schema](#Schema), which controls which types exist and which
+// attributes they have.
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
 
-var _get = function get(_x10, _x11, _x12) { var _again = true; _function: while (_again) { var object = _x10, property = _x11, receiver = _x12; _again = false; if (object === null) object = Function.prototype; var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { _x10 = parent; _x11 = property; _x12 = receiver; _again = true; desc = parent = undefined; continue _function; } } else if ("value" in desc) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } } };
-
 var _createClass = (function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
 
-exports.compareMarkup = compareMarkup;
+function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) arr2[i] = arr[i]; return arr2; } else { return Array.from(arr); } }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+var Mark = (function () {
+  function Mark(type, attrs) {
+    _classCallCheck(this, Mark);
+
+    // :: MarkType
+    // The type of this mark.
+    this.type = type;
+    // :: Object
+    // The attributes associated with this mark.
+    this.attrs = attrs;
+  }
+
+  // :: () → Object
+  // Convert this mark to a JSON-serializeable representation.
+
+  _createClass(Mark, [{
+    key: "toJSON",
+    value: function toJSON() {
+      if (this.type.instance) return this.type.name;
+      var obj = { _: this.type.name };
+      for (var attr in this.attrs) {
+        obj[attr] = this.attrs[attr];
+      }return obj;
+    }
+
+    // :: ([Mark]) → [Mark]
+    // Given a set of marks, create a new set which contains this one as
+    // well, in the right position. If this mark or another of its type
+    // is already in the set, the set itself is returned.
+  }, {
+    key: "addToSet",
+    value: function addToSet(set) {
+      for (var i = 0; i < set.length; i++) {
+        var other = set[i];
+        if (other.type == this.type) {
+          if (this.eq(other)) return set;else return [].concat(_toConsumableArray(set.slice(0, i)), [this], _toConsumableArray(set.slice(i + 1)));
+        }
+        if (other.type.rank > this.type.rank) return [].concat(_toConsumableArray(set.slice(0, i)), [this], _toConsumableArray(set.slice(i)));
+      }
+      return set.concat(this);
+    }
+
+    // :: ([Mark]) → [Mark]
+    // Remove this mark from the given set, returning a new set. If this
+    // mark is not in the set, the set itself is returned.
+  }, {
+    key: "removeFromSet",
+    value: function removeFromSet(set) {
+      for (var i = 0; i < set.length; i++) if (this.eq(set[i])) return [].concat(_toConsumableArray(set.slice(0, i)), _toConsumableArray(set.slice(i + 1)));
+      return set;
+    }
+
+    // :: ([Mark]) → bool
+    // Test whether this mark is in the given set of marks.
+  }, {
+    key: "isInSet",
+    value: function isInSet(set) {
+      for (var i = 0; i < set.length; i++) {
+        if (this.eq(set[i])) return true;
+      }return false;
+    }
+
+    // :: (Mark) → bool
+    // Test whether this mark has the same type and attributes as
+    // another mark.
+  }, {
+    key: "eq",
+    value: function eq(other) {
+      if (this == other) return true;
+      if (this.type != other.type) return false;
+      for (var attr in this.attrs) {
+        if (other.attrs[attr] != this.attrs[attr]) return false;
+      }return true;
+    }
+
+    // :: ([Mark], [Mark]) → bool
+    // Test whether two sets of marks are identical.
+  }], [{
+    key: "sameSet",
+    value: function sameSet(a, b) {
+      if (a == b) return true;
+      if (a.length != b.length) return false;
+      for (var i = 0; i < a.length; i++) {
+        if (!a[i].eq(b[i])) return false;
+      }return true;
+    }
+  }]);
+
+  return Mark;
+})();
+
+exports.Mark = Mark;
+
+},{}],29:[function(require,module,exports){
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _get = function get(_x8, _x9, _x10) { var _again = true; _function: while (_again) { var object = _x8, property = _x9, receiver = _x10; _again = false; if (object === null) object = Function.prototype; var desc = Object.getOwnPropertyDescriptor(object, property); if (desc === undefined) { var parent = Object.getPrototypeOf(object); if (parent === null) { return undefined; } else { _x8 = parent; _x9 = property; _x10 = receiver; _again = true; desc = parent = undefined; continue _function; } } else if ("value" in desc) { return desc.value; } else { var getter = desc.get; if (getter === undefined) { return undefined; } return getter.call(receiver); } } };
+
+var _createClass = (function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
 
 function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
-var _style = require("./style");
+var _fragment = require("./fragment");
+
+var _mark = require("./mark");
 
 var emptyArray = [];
 
-/**
- * Document node class
- */
+// ;; This class represents a node in the tree that makes up a
+// ProseMirror document. So a document is an instance of `Node`, with
+// children that are also instances of `Node`.
+//
+// Nodes are persistent data structures. Instead of changing them, you
+// create new ones with the content you want. Old ones keep pointing
+// at the old document shape. This is made cheaper by sharing
+// structure between the old and new data as much as possible, which a
+// tree shape like this (without back pointers) makes easy.
+//
+// **Never** directly mutate the properties of a `Node` object.
 
 var Node = (function () {
-  function Node(type, attrs) {
+  function Node(type, attrs, content, marks) {
     _classCallCheck(this, Node);
 
+    // :: NodeType
+    // The type of node that this is.
     this.type = type;
+
+    // :: Object
+    // An object mapping attribute names to string values. The kind of
+    // attributes allowed and required are determined by the node
+    // type.
     this.attrs = attrs;
+
+    // :: Fragment
+    // The node's content.
+    this.content = content || _fragment.emptyFragment;
+
+    // :: [Mark]
+    // The marks (things like whether it is emphasized or part of a
+    // link) associated with this node.
+    this.marks = marks || emptyArray;
   }
+
+  // :: number
+  // The size of the node's content, which is the maximum offset in
+  // the node. For nodes that don't contain text, this is also the
+  // number of child nodes that the node has.
 
   _createClass(Node, [{
-    key: "sameMarkup",
-    value: function sameMarkup(other) {
-      return compareMarkup(this.type, other.type, this.attrs, other.attrs);
-    }
-  }, {
     key: "child",
-    value: function child(_) {
-      throw new Error("Trying to index non-block node " + this);
-    }
-  }, {
-    key: "toJSON",
-    value: function toJSON() {
-      var obj = { type: this.type.name };
-      for (var _ in this.attrs) {
-        obj.attrs = this.attrs;
-        return obj;
-      }
-      return obj;
-    }
-  }, {
-    key: "length",
-    get: function get() {
-      return 0;
-    }
-  }, {
-    key: "isBlock",
-    get: function get() {
-      return false;
-    }
-  }, {
-    key: "isTextblock",
-    get: function get() {
-      return false;
-    }
-  }, {
-    key: "isInline",
-    get: function get() {
-      return false;
-    }
-  }, {
-    key: "isText",
-    get: function get() {
-      return false;
-    }
-  }]);
 
-  return Node;
-})();
+    // :: (number) → Node
+    // Retrieve the child at the given offset. Note that this is **not**
+    // the appropriate way to loop over a node. `child`'s complexity may
+    // be non-constant for some nodes, and it will return the same node
+    // multiple times when calling it for different offsets within a
+    // text node.
+    value: function child(off) {
+      return this.content.child(off);
+    }
 
-exports.Node = Node;
+    // :: (?number, ?number) → Iterator<Node>
+    // Create an iterator over this node's children, optionally starting
+    // and ending at a given offset.
+  }, {
+    key: "iter",
+    value: function iter(start, end) {
+      return this.content.iter(start, end);
+    }
 
-var BlockNode = (function (_Node) {
-  _inherits(BlockNode, _Node);
+    // :: (?number, ?number) → Iterator<Node>
+    // Create a reverse iterator (iterating from the node's end towards
+    // its start) over this node's children, optionally starting and
+    // ending at a given offset. **Note**: if given, `start` should be
+    // greater than (or equal) to `end`.
+  }, {
+    key: "reverseIter",
+    value: function reverseIter(start, end) {
+      return this.content.reverseIter(start, end);
+    }
 
-  function BlockNode(type, attrs, content, styles) {
-    _classCallCheck(this, BlockNode);
+    // :: (number) → {start: number, node: Node}
+    // Find the node that sits before a given offset. Can be used to
+    // find out which text node covers a given offset. The `start`
+    // property of the return value is the starting offset of the
+    // returned node. It is an error to call this with offset 0.
+  }, {
+    key: "chunkBefore",
+    value: function chunkBefore(off) {
+      return this.content.chunkBefore(off);
+    }
 
-    if (styles) throw new Error("Constructing a block node with styles");
-    _get(Object.getPrototypeOf(BlockNode.prototype), "constructor", this).call(this, type, attrs);
-    this.content = content || emptyArray;
-  }
+    // :: (number) → {start: number, node: Node}
+    // Find the node that sits after a given offset. The `start`
+    // property of the return value is the starting offset of the
+    // returned node. It is an error to call this with offset
+    // corresponding to the end of the node.
+  }, {
+    key: "chunkAfter",
+    value: function chunkAfter(off) {
+      return this.content.chunkAfter(off);
+    }
 
-  _createClass(BlockNode, [{
-    key: "toString",
-    value: function toString() {
-      return this.type.name + "(" + this.content.join(", ") + ")";
+    // :: ((node: Node, start: number, end: number))
+    // Call the given function for each child node. The function will be
+    // given the node, as well as its start and end offsets, as
+    // arguments.
+  }, {
+    key: "forEach",
+    value: function forEach(f) {
+      this.content.forEach(f);
+    }
+
+    // :: string
+    // Concatenate all the text nodes found in this fragment and its
+    // childen.
+  }, {
+    key: "sameMarkup",
+
+    // :: (Node) → bool
+    // Compare the markup (type, attributes, and marks) of this node to
+    // those of another. Returns `true` if both have the same markup.
+    value: function sameMarkup(other) {
+      return this.hasMarkup(other.type, other.attrs, other.marks);
+    }
+
+    // :: (NodeType, ?Object, ?[Mark]) → bool
+    // Check whether this node's markup correspond to the given type,
+    // attributes, and marks.
+  }, {
+    key: "hasMarkup",
+    value: function hasMarkup(type, attrs, marks) {
+      return this.type == type && Node.sameAttrs(this.attrs, attrs) && _mark.Mark.sameSet(this.marks, marks || emptyArray);
     }
   }, {
     key: "copy",
+
+    // :: (?Fragment) → Node
+    // Create a new node with the same markup as this node, containing
+    // the given content (or empty, if no content is given).
     value: function copy() {
       var content = arguments.length <= 0 || arguments[0] === undefined ? null : arguments[0];
 
-      return new this.constructor(this.type, this.attrs, content);
+      return new this.constructor(this.type, this.attrs, content, this.marks);
     }
+
+    // :: ([Mark]) → Node
+    // Create a copy of this node, with the given set of marks instead
+    // of the node's own marks.
+  }, {
+    key: "mark",
+    value: function mark(marks) {
+      return new this.constructor(this.type, this.attrs, this.content, marks);
+    }
+
+    // :: (number, ?number) → Node
+    // Create a copy of this node with only the content between the
+    // given offsets. If `to` is not given, it defaults to the end of
+    // the node.
   }, {
     key: "slice",
-    value: function slice(from) {
-      var to = arguments.length <= 1 || arguments[1] === undefined ? this.length : arguments[1];
-
-      return this.content.slice(from, to);
+    value: function slice(from, to) {
+      return this.copy(this.content.slice(from, to));
     }
 
-    // FIXME maybe slice and splice returning different things is going to confuse
+    // :: (number, number, Fragment) → Node
+    // Create a copy of this node with the content between the given
+    // offsets replaced by the given fragment.
   }, {
     key: "splice",
     value: function splice(from, to, replace) {
-      return new this.constructor(this.type, this.attrs, this.content.slice(0, from).concat(replace).concat(this.content.slice(to)));
+      return this.copy(this.content.slice(0, from).append(replace).append(this.content.slice(to)));
     }
+
+    // :: (Fragment, ?number, ?number) → Node
+    // [Append](#Fragment.append) the given fragment to this node's
+    // content, and create a new node with the result.
+  }, {
+    key: "append",
+    value: function append(fragment) {
+      var joinLeft = arguments.length <= 1 || arguments[1] === undefined ? 0 : arguments[1];
+      var joinRight = arguments.length <= 2 || arguments[2] === undefined ? 0 : arguments[2];
+
+      return this.copy(this.content.append(fragment, joinLeft, joinRight));
+    }
+
+    // :: (number, Node) → Node
+    // Return a copy of this node with the child at the given offset
+    // replaced by the given node. **Note**: The offset should not fall
+    // within a text node.
   }, {
     key: "replace",
     value: function replace(pos, node) {
-      var content = this.content.slice();
-      content[pos] = node;
-      return this.copy(content);
+      return this.copy(this.content.replace(pos, node));
     }
+
+    // :: ([number], Node) → Node
+    // Return a copy of this node with the descendant at `path` replaced
+    // by the given replacement node. This will copy as many subnodes as
+    // there are elements in `path`.
   }, {
     key: "replaceDeep",
     value: function replaceDeep(path, node) {
@@ -6325,71 +7228,38 @@ var BlockNode = (function (_Node) {
       var pos = path[depth];
       return this.replace(pos, this.child(pos).replaceDeep(path, node, depth + 1));
     }
-  }, {
-    key: "append",
-    value: function append(nodes) {
-      var joinLeft = arguments.length <= 1 || arguments[1] === undefined ? 0 : arguments[1];
-      var joinRight = arguments.length <= 2 || arguments[2] === undefined ? 0 : arguments[2];
 
-      if (!nodes.length) return this;
-      if (!this.length) return this.copy(nodes);
-
-      var last = this.length - 1,
-          content = this.content.slice(0, last);
-      var before = this.content[last],
-          after = nodes[0];
-      if (joinLeft > 0 && joinRight > 0 && before.sameMarkup(after)) content.push(before.append(after.content, joinLeft - 1, joinRight - 1));else content.push(before.close(joinLeft - 1, "end"), after.close(joinRight - 1, "start"));
-      for (var i = 1; i < nodes.length; i++) {
-        content.push(nodes[i]);
-      }return this.copy(content);
-    }
+    // :: (number, string) → Node
+    // “Close” this node by making sure that, if it is empty, and is not
+    // allowed to be so, it has its default content inserted. When depth
+    // is greater than zero, subnodes at the given side (which can be
+    // `"start"` or `"end"`) are closed too. Returns itself if no work
+    // is necessary, or a closed copy if something did need to happen.
   }, {
     key: "close",
     value: function close(depth, side) {
-      if (depth == 0 && this.length == 0 && !this.type.canBeEmpty) return this.copy(this.type.defaultContent());
-      if (depth < 0) return this;
-      var off = side == "start" ? 0 : this.maxOffset - 1,
-          child = this.child(off);
-      var closed = child.close(depth - 1, side);
-      if (closed == child) return this;
-      return this.replace(off, closed);
+      if (depth == 0 && this.size == 0 && !this.type.canBeEmpty) return this.copy(this.type.defaultContent());
+      var closedContent = undefined;
+      if (depth > 0 && (closedContent = this.content.close(depth - 1, side)) != this.content) return this.copy(closedContent);
+      return this;
     }
-  }, {
-    key: "child",
 
-    /**
-     * Get the child node at a given index.
-     */
-    value: function child(i) {
-      if (i < 0 || i >= this.length) throw new Error("Index " + i + " out of range in " + this);
-      return this.content[i];
-    }
+    // :: ([number]) → Node
+    // Get the descendant node at the given path, which is interpreted
+    // as a series of offsets into successively deeper nodes.
   }, {
     key: "path",
-
-    /**
-     * Get a child node given a path.
-     *
-     * @param  {array} path
-     * @return {Node}
-     */
     value: function path(_path) {
-      for (var i = 0, node = this; i < _path.length; node = node.content[_path[i]], i++) {}
+      for (var i = 0, node = this; i < _path.length; node = node.child(_path[i]), i++) {}
       return node;
     }
+
+    // :: (Pos) → Node
+    // Get the node after the given position.
   }, {
-    key: "isValidPos",
-    value: function isValidPos(pos, requireInBlock) {
-      for (var i = 0, node = this;; i++) {
-        if (i == pos.path.length) {
-          if (requireInBlock && !node.isTextblock) return false;
-          return pos.offset <= node.maxOffset;
-        } else {
-          var n = pos.path[i];
-          if (n >= node.length || node.isTextblock) return false;
-          node = node.child(n);
-        }
-      }
+    key: "nodeAfter",
+    value: function nodeAfter(pos) {
+      return this.path(pos.path).child(pos.offset);
     }
   }, {
     key: "pathNodes",
@@ -6402,300 +7272,265 @@ var BlockNode = (function (_Node) {
       }
       return nodes;
     }
+
+    // :: (Pos, ?bool) → bool
+    // Checks whether the given position is valid in this node. When
+    // `requireTextblock` is true, only positions inside textblocks are
+    // considered valid.
   }, {
-    key: "toJSON",
-    value: function toJSON() {
-      var obj = _get(Object.getPrototypeOf(BlockNode.prototype), "toJSON", this).call(this);
-      obj.content = this.content.map(function (n) {
-        return n.toJSON();
-      });
-      return obj;
+    key: "isValidPos",
+    value: function isValidPos(pos, requireTextblock) {
+      for (var i = 0, node = this;; i++) {
+        if (i == pos.path.length) {
+          if (requireTextblock && !node.isTextblock) return false;
+          return pos.offset <= node.size;
+        } else {
+          var n = pos.path[i];
+          if (n >= node.size) return false;
+          node = node.child(n);
+        }
+      }
     }
+
+    // :: (?Pos, ?Pos, (node: Node, path: [number], parent: Node))
+    // Iterate over all nodes between the given two positions, calling
+    // the callback with the node, the path towards it, and its parent
+    // node, as arguments. `from` and `to` may be `null` to denote
+    // starting at the start of the node or ending at its end. Note that
+    // the path passed to the callback is mutated as iteration
+    // continues, so if you want to preserve it, make a copy.
   }, {
     key: "nodesBetween",
     value: function nodesBetween(from, to, f) {
       var path = arguments.length <= 3 || arguments[3] === undefined ? [] : arguments[3];
       var parent = arguments.length <= 4 || arguments[4] === undefined ? null : arguments[4];
 
-      if (f(this, path, from, to, parent) === false) return;
+      if (f(this, path, parent) === false) return;
+      this.content.nodesBetween(from, to, f, path, this);
+    }
 
-      var start = undefined,
-          endPartial = to && to.depth > path.length;
-      var end = endPartial ? to.path[path.length] : to ? to.offset : this.length;
-      if (!from) {
-        start = 0;
-      } else if (from.depth == path.length) {
-        start = from.offset;
-      } else {
-        start = from.path[path.length] + 1;
-        var passTo = null;
-        if (endPartial && end == start - 1) {
-          passTo = to;
-          endPartial = false;
-        }
-        this.enterNode(start - 1, from, passTo, path, f);
-      }
-      for (var i = start; i < end; i++) {
-        this.enterNode(i, null, null, path, f);
-      }if (endPartial) this.enterNode(end, null, to, path, f);
-    }
-  }, {
-    key: "enterNode",
-    value: function enterNode(index, from, to, path, f) {
-      path.push(index);
-      this.child(index).nodesBetween(from, to, f, path, this);
-      path.pop();
-    }
+    // :: (?Pos, ?Pos, (node: Node, path: [number], start: number, end: number, parent: Node))
+    // Calls the given function for each inline node between the two
+    // given positions. Pass null for `from` or `to` to start or end at
+    // the start or end of the node.
   }, {
     key: "inlineNodesBetween",
     value: function inlineNodesBetween(from, to, f) {
-      this.nodesBetween(from, to, function (node, path, from, to, parent, offset) {
-        if (node.isInline) f(node, from ? from.offset : offset, to ? to.offset : offset + node.offset, path, parent);
+      this.nodesBetween(from, to, function (node, path, parent) {
+        if (node.isInline) {
+          var last = path.length - 1;
+          f(node, path.slice(0, last), path[last], path[last] + node.width, parent);
+        }
       });
     }
-  }, {
-    key: "maxOffset",
-    get: function get() {
-      return this.length;
-    }
-  }, {
-    key: "textContent",
-    get: function get() {
-      var text = "";
-      for (var i = 0; i < this.length; i++) {
-        text += this.child(i).textContent;
-      }return text;
-    }
-  }, {
-    key: "firstChild",
-    get: function get() {
-      return this.content[0] || null;
-    }
-  }, {
-    key: "lastChild",
-    get: function get() {
-      return this.content[this.length - 1] || null;
-    }
-  }, {
-    key: "length",
-    get: function get() {
-      return this.content.length;
-    }
-  }, {
-    key: "children",
-    get: function get() {
-      return this.content;
-    }
-  }, {
-    key: "isBlock",
-    get: function get() {
-      return true;
-    }
-  }]);
 
-  return BlockNode;
-})(Node);
-
-exports.BlockNode = BlockNode;
-
-var TextblockNode = (function (_BlockNode) {
-  _inherits(TextblockNode, _BlockNode);
-
-  function TextblockNode(type, attrs, content) {
-    _classCallCheck(this, TextblockNode);
-
-    _get(Object.getPrototypeOf(TextblockNode.prototype), "constructor", this).call(this, type, attrs, content);
-    var maxOffset = 0;
-    for (var i = 0; i < this.content.length; i++) {
-      maxOffset += this.content[i].offset;
-    }this._maxOffset = maxOffset;
-  }
-
-  _createClass(TextblockNode, [{
-    key: "slice",
-    value: function slice(from) {
-      var to = arguments.length <= 1 || arguments[1] === undefined ? this.maxOffset : arguments[1];
-
-      var result = [];
-      if (from == to) return result;
-      for (var i = 0, offset = 0;; i++) {
-        var child = this.child(i),
-            size = child.offset,
-            end = offset + size;
-        if (offset + size > from) result.push(offset >= from && end <= to ? child : child.slice(Math.max(0, from - offset), Math.min(size, to - offset)));
-        if (end >= to) return result;
-        offset = end;
-      }
-    }
+    // :: (?Pos, ?Pos) → Node
+    // Returns a copy of this node containing only the content between
+    // `from` and `to`. You can pass `null` for either of them to start
+    // or end at the start or end of the node.
   }, {
-    key: "append",
-    value: function append(nodes) {
-      if (!nodes.length) return this;
-      if (!this.length) return this.copy(nodes);
+    key: "sliceBetween",
+    value: function sliceBetween(from, to) {
+      var depth = arguments.length <= 2 || arguments[2] === undefined ? 0 : arguments[2];
 
-      var content = this.content.concat(nodes),
-          last = this.length - 1,
-          merged = undefined;
-      if (merged = content[last].maybeMerge(content[last + 1])) content.splice(last, 2, merged);
-      return this.copy(content);
+      return this.copy(this.content.sliceBetween(from, to, depth));
     }
-  }, {
-    key: "close",
-    value: function close() {
-      return this;
-    }
-  }, {
-    key: "nodesBetween",
-    value: function nodesBetween(from, to, f, path, parent) {
-      if (f(this, path, from, to, parent) === false) return;
-      var start = from ? from.offset : 0,
-          end = to ? to.offset : this.maxOffset;
-      if (start == end) return;
-      for (var offset = 0, i = 0; i < this.length; i++) {
-        var child = this.child(i),
-            endOffset = offset + child.offset;
-        if (endOffset >= start) f(child, path, offset < start ? from : null, endOffset > end ? to : null, this, offset);
-        if (endOffset >= end) break;
-        offset = endOffset;
-      }
-    }
-  }, {
-    key: "childBefore",
-    value: function childBefore(offset) {
-      if (offset == 0) return { node: null, index: 0, innerOffset: 0 };
-      for (var i = 0; i < this.length; i++) {
-        var child = this.child(i);
-        offset -= child.offset;
-        if (offset <= 0) return { node: child, index: i, innerOffset: offset + child.offset };
-      }
-    }
-  }, {
-    key: "childAfter",
-    value: function childAfter(offset) {
-      for (var i = 0; i < this.length; i++) {
-        var child = this.child(i),
-            size = child.offset;
-        if (offset < size) return { node: child, index: i, innerOffset: offset };
-        offset -= size;
-      }
-      return { node: null, index: 0, innerOffset: 0 };
-    }
-  }, {
-    key: "isTextblock",
-    get: function get() {
-      return true;
-    }
-  }, {
-    key: "maxOffset",
-    get: function get() {
-      return this._maxOffset;
-    }
-  }]);
 
-  return TextblockNode;
-})(BlockNode);
-
-exports.TextblockNode = TextblockNode;
-
-var InlineNode = (function (_Node2) {
-  _inherits(InlineNode, _Node2);
-
-  function InlineNode(type, attrs, content, styles) {
-    _classCallCheck(this, InlineNode);
-
-    if (content) throw new Error("Can't create a span node with content");
-    _get(Object.getPrototypeOf(InlineNode.prototype), "constructor", this).call(this, type, attrs);
-    this.styles = styles || emptyArray;
-  }
-
-  _createClass(InlineNode, [{
-    key: "styled",
-    value: function styled(styles) {
-      return new this.constructor(this.type, this.attrs, this.text, styles);
-    }
+    // :: (Pos) → [Mark]
+    // Get the marks of the node before the given position or, if that
+    // position is at the start of a non-empty node, those of the node
+    // after it.
   }, {
-    key: "maybeMerge",
-    value: function maybeMerge(_) {
-      return null;
+    key: "marksAt",
+    value: function marksAt(pos) {
+      var parent = this.path(pos.path);
+      if (!parent.isTextblock || !parent.size) return emptyArray;
+      return parent.chunkBefore(pos.offset || 1).node.marks;
     }
+
+    // :: (?Pos, ?Pos, MarkType) → bool
+    // Test whether a mark of the given type occurs in this document
+    // between the two given positions.
+  }, {
+    key: "rangeHasMark",
+    value: function rangeHasMark(from, to, type) {
+      var found = false;
+      this.nodesBetween(from, to, function (node) {
+        if (type.isInSet(node.marks)) found = true;
+      });
+      return found;
+    }
+
+    // :: bool
+    // True when this is a block (non-inline node)
+  }, {
+    key: "toString",
+
+    // :: () → string
+    // Return a string representation of this node for debugging
+    // purposes.
+    value: function toString() {
+      var name = this.type.name;
+      if (this.content.size) name += "(" + this.content.toString() + ")";
+      return wrapMarks(this.marks, name);
+    }
+
+    // :: () → Object
+    // Return a JSON-serializable representation of this node.
   }, {
     key: "toJSON",
     value: function toJSON() {
-      var obj = _get(Object.getPrototypeOf(InlineNode.prototype), "toJSON", this).call(this);
-      if (this.styles.length) obj.styles = this.styles.map(function (s) {
-        return s.toJSON();
+      var obj = { type: this.type.name };
+      for (var _ in this.attrs) {
+        obj.attrs = this.attrs;
+        break;
+      }
+      if (this.size) obj.content = this.content.toJSON();
+      if (this.marks.length) obj.marks = this.marks.map(function (n) {
+        return n.toJSON();
       });
       return obj;
     }
+
+    // This is a hack to be able to treat a node object as an iterator result
   }, {
-    key: "toString",
-    value: function toString() {
-      return this.type.name;
+    key: "size",
+    get: function get() {
+      return this.content.size;
     }
+
+    // :: number
+    // The width of this node. Always 1 for non-text nodes, and the
+    // length of the text for text nodes.
   }, {
-    key: "offset",
+    key: "width",
     get: function get() {
       return 1;
     }
   }, {
     key: "textContent",
     get: function get() {
-      return "";
+      return this.content.textContent;
     }
+
+    // :: ?Node
+    // Returns this node's first child, or `null` if there are no
+    // children.
+  }, {
+    key: "firstChild",
+    get: function get() {
+      return this.content.firstChild;
+    }
+
+    // :: ?Node
+    // Returns this node's last child, or `null` if there are no
+    // children.
+  }, {
+    key: "lastChild",
+    get: function get() {
+      return this.content.lastChild;
+    }
+  }, {
+    key: "isBlock",
+    get: function get() {
+      return this.type.isBlock;
+    }
+
+    // :: bool
+    // True when this is a textblock node, a block node with inline
+    // content.
+  }, {
+    key: "isTextblock",
+    get: function get() {
+      return this.type.isTextblock;
+    }
+
+    // :: bool
+    // True when this is an inline node (a text node or a node that can
+    // appear among text).
   }, {
     key: "isInline",
     get: function get() {
-      return true;
+      return this.type.isInline;
+    }
+
+    // :: bool
+    // True when this is a text node.
+  }, {
+    key: "isText",
+    get: function get() {
+      return this.type.isText;
+    }
+  }, {
+    key: "value",
+    get: function get() {
+      return this;
+    }
+
+    // :: (Schema, Object) → Node
+    // Deserialize a node from its JSON representation.
+  }], [{
+    key: "sameAttrs",
+    value: function sameAttrs(a, b) {
+      if (a == b) return true;
+      var empty = isEmpty(a);
+      if (empty != isEmpty(b)) return false;
+      if (!empty) for (var prop in a) {
+        if (a[prop] !== b[prop]) return false;
+      }return true;
+    }
+  }, {
+    key: "fromJSON",
+    value: function fromJSON(schema, json) {
+      var type = schema.nodeType(json.type);
+      var content = json.text != null ? json.text : _fragment.Fragment.fromJSON(schema, json.content);
+      return type.create(json.attrs, content, json.marks && json.marks.map(schema.markFromJSON));
     }
   }]);
 
-  return InlineNode;
-})(Node);
+  return Node;
+})();
 
-exports.InlineNode = InlineNode;
+exports.Node = Node;
 
-var TextNode = (function (_InlineNode) {
-  _inherits(TextNode, _InlineNode);
+if (typeof Symbol != "undefined") {
+  // :: () → Iterator<Node>
+  // A fragment is iterable, in the ES6 sense.
+  Node.prototype[Symbol.iterator] = function () {
+    return this.iter();
+  };
+}
 
-  function TextNode(type, attrs, content, styles) {
+// ;; #forward=Node
+
+var TextNode = (function (_Node) {
+  _inherits(TextNode, _Node);
+
+  function TextNode(type, attrs, content, marks) {
     _classCallCheck(this, TextNode);
 
-    if (typeof content != "string" || !content) throw new Error("Text node content must be a non-empty string");
-    _get(Object.getPrototypeOf(TextNode.prototype), "constructor", this).call(this, type, attrs, null, styles);
+    _get(Object.getPrototypeOf(TextNode.prototype), "constructor", this).call(this, type, attrs, null, marks);
+    // :: ?string
+    // For text nodes, this contains the node's text content.
     this.text = content;
   }
 
   _createClass(TextNode, [{
-    key: "maybeMerge",
-    value: function maybeMerge(other) {
-      if (other.type == this.type && (0, _style.sameStyles)(this.styles, other.styles)) return new TextNode(this.type, this.attrs, this.text + other.text, this.styles);
-    }
-  }, {
-    key: "slice",
-    value: function slice(from) {
-      var to = arguments.length <= 1 || arguments[1] === undefined ? this.offset : arguments[1];
-
-      return new TextNode(this.type, this.attrs, this.text.slice(from, to), this.styles);
-    }
-  }, {
     key: "toString",
     value: function toString() {
-      var text = JSON.stringify(this.text);
-      for (var i = 0; i < this.styles.length; i++) {
-        text = this.styles[i].type.name + "(" + text + ")";
-      }return text;
+      return wrapMarks(this.marks, JSON.stringify(this.text));
+    }
+  }, {
+    key: "mark",
+    value: function mark(marks) {
+      return new TextNode(this.type, this.attrs, this.text, marks);
     }
   }, {
     key: "toJSON",
     value: function toJSON() {
-      var obj = _get(Object.getPrototypeOf(TextNode.prototype), "toJSON", this).call(this);
-      obj.text = this.text;
-      return obj;
-    }
-  }, {
-    key: "offset",
-    get: function get() {
-      return this.text.length;
+      var base = _get(Object.getPrototypeOf(TextNode.prototype), "toJSON", this).call(this);
+      base.text = this.text;
+      return base;
     }
   }, {
     key: "textContent",
@@ -6703,16 +7538,22 @@ var TextNode = (function (_InlineNode) {
       return this.text;
     }
   }, {
-    key: "isText",
+    key: "width",
     get: function get() {
-      return true;
+      return this.text.length;
     }
   }]);
 
   return TextNode;
-})(InlineNode);
+})(Node);
 
 exports.TextNode = TextNode;
+
+function wrapMarks(marks, str) {
+  for (var i = marks.length - 1; i >= 0; i--) {
+    str = marks[i].type.name + "(" + str + ")";
+  }return str;
+}
 
 function isEmpty(obj) {
   if (obj) for (var _ in obj) {
@@ -6720,15 +7561,12 @@ function isEmpty(obj) {
   }return true;
 }
 
-function compareMarkup(typeA, typeB, attrsA, attrsB) {
-  if (typeA != typeB) return false;
-  if (isEmpty(attrsA)) return isEmpty(attrsB);
-  if (isEmpty(attrsB)) return false;
-  for (var prop in attrsA) if (attrsB[prop] !== attrsA[prop]) return false;
-  return true;
-}
+},{"./fragment":26,"./mark":28}],30:[function(require,module,exports){
+// ;; Instances of the `Pos` class represent positions in a document.
+// A position an array of integers that describe a path to the target
+// node (see [`Node.path`](#Node..path)) and an integer offset into
+// that target node.
 
-},{"./style":31}],28:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -6737,29 +7575,57 @@ Object.defineProperty(exports, "__esModule", {
 
 var _createClass = (function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
 
+exports.siblingRange = siblingRange;
+
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 var Pos = (function () {
+  // :: (path: [number], number)
+
   function Pos(path, offset) {
     _classCallCheck(this, Pos);
 
+    // :: [number] The path to the target node.
     this.path = path;
+    // :: number The offset into the target node.
     this.offset = offset;
   }
+
+  // ;; Return a string representation of the path of the form
+  // `"0/2:10"`, where the numbers before the colon are the path, and
+  // the number after it is the offset.
 
   _createClass(Pos, [{
     key: "toString",
     value: function toString() {
       return this.path.join("/") + ":" + this.offset;
     }
+
+    // :: number
+    // The length of the position's path.
   }, {
     key: "cmp",
+
+    // :: (Pos) → number
+    // Compares this position to another position, and returns a number.
+    // Of this result number, only the sign is significant. It is
+    // negative if this position is less than the other one, zero if
+    // they are the same, and positive if this position is greater.
     value: function cmp(other) {
       if (other == this) return 0;
       return Pos.cmp(this.path, this.offset, other.path, other.offset);
     }
   }, {
     key: "shorten",
+
+    // :: (?number, ?number) → Pos
+    // Create a position pointing into a parent of this position's
+    // target. When `to` is given, it determines the new length of the
+    // path. By default, the path becomes one storter. The `offset`
+    // parameter can be used to determine where in this parent the
+    // position points. By default, it points before the old target. You
+    // can pass a negative or positive integer to move it backward or
+    // forward (**note**: this method performs no bounds checking).
     value: function shorten() {
       var to = arguments.length <= 0 || arguments[0] === undefined ? null : arguments[0];
       var offset = arguments.length <= 1 || arguments[1] === undefined ? 0 : arguments[1];
@@ -6767,17 +7633,27 @@ var Pos = (function () {
       if (to >= this.depth) return this;
       return Pos.shorten(this.path, to, offset);
     }
+
+    // :: (number) → Pos
+    // Create a position with an offset moved relative to this
+    // position's offset. For example moving `0/1:10` by `-2` yields
+    // `0/1:8`.
   }, {
     key: "move",
     value: function move(by) {
       return new Pos(this.path, this.offset + by);
     }
+
+    // :: (?move) → [number]
+    // Convert this position to an array of numbers (including its
+    // offset). Optionally pass an argument to adjust the value of the
+    // offset.
   }, {
     key: "toPath",
     value: function toPath() {
-      var offset = arguments.length <= 0 || arguments[0] === undefined ? 0 : arguments[0];
+      var move = arguments.length <= 0 || arguments[0] === undefined ? 0 : arguments[0];
 
-      return this.path.concat(this.offset + offset);
+      return this.path.concat(this.offset + move);
     }
   }, {
     key: "extend",
@@ -6790,11 +7666,19 @@ var Pos = (function () {
       }
       return new Pos(path, pos.offset + add);
     }
+
+    // :: () → Object
+    // Convert the position to a JSON-safe representation.
   }, {
     key: "toJSON",
     value: function toJSON() {
       return this;
     }
+
+    // :: ([number], ?number) → Pos
+    // Build a position from an array of numbers (as in
+    // [toPath](#Pos.toPath)), taking the last element of the array as
+    // offset and optionally moving it by `move`.
   }, {
     key: "depth",
     get: function get() {
@@ -6811,6 +7695,9 @@ var Pos = (function () {
       }
       if (lenA > lenB) return offsetB <= pathA[i] ? 1 : -1;else if (lenB > lenA) return offsetA <= pathB[i] ? -1 : 1;else return offsetA - offsetB;
     }
+
+    // :: ([number], [number]) → bool
+    // Compares two paths and returns true when they are the same.
   }, {
     key: "samePath",
     value: function samePath(pathA, pathB) {
@@ -6831,11 +7718,14 @@ var Pos = (function () {
   }, {
     key: "from",
     value: function from(array) {
-      var extraOffset = arguments.length <= 1 || arguments[1] === undefined ? 0 : arguments[1];
+      var move = arguments.length <= 1 || arguments[1] === undefined ? 0 : arguments[1];
 
       if (!array.length) throw new Error("Can't create a pos from an empty array");
-      return new Pos(array.slice(0, array.length - 1), array[array.length - 1] + extraOffset);
+      return new Pos(array.slice(0, array.length - 1), array[array.length - 1] + move);
     }
+
+    // :: (Object) → Pos
+    // Create a position from a JSON representation.
   }, {
     key: "fromJSON",
     value: function fromJSON(json) {
@@ -6848,7 +7738,26 @@ var Pos = (function () {
 
 exports.Pos = Pos;
 
-},{}],29:[function(require,module,exports){
+function siblingRange(doc, from, to) {
+  for (var i = 0, node = doc;; i++) {
+    if (node.isTextblock) {
+      var path = from.path.slice(0, i - 1),
+          offset = from.path[i - 1];
+      return { from: new Pos(path, offset), to: new Pos(path, offset + 1) };
+    }
+    var fromEnd = i == from.path.length,
+        toEnd = i == to.path.length;
+    var left = fromEnd ? from.offset : from.path[i];
+    var right = toEnd ? to.offset : to.path[i];
+    if (fromEnd || toEnd || left != right) {
+      var path = from.path.slice(0, i);
+      return { from: new Pos(path, left), to: new Pos(path, right + (toEnd ? 0 : 1)) };
+    }
+    node = node.child(left);
+  }
+}
+
+},{}],31:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -6867,9 +7776,13 @@ function _inherits(subClass, superClass) { if (typeof superClass !== "function" 
 
 var _node = require("./node");
 
-var _style = require("./style");
+var _fragment = require("./fragment");
+
+var _mark = require("./mark");
 
 var _utilError = require("../util/error");
+
+// ;; The exception type used to signal schema-related errors.
 
 var SchemaError = (function (_ProseMirrorError) {
   _inherits(SchemaError, _ProseMirrorError);
@@ -6918,38 +7831,109 @@ function findKinds(type, name, schema, override) {
   }
 }
 
+// ;; Node types are objects allocated once per [`Schema`](#Schema)
+// and used to tag [`Node`](#Node) instances with a type. They are
+// instances of subtypes of this class, and contain information about
+// the node type (its name, its allowed attributes, methods for
+// serializing it to various formats, information to guide
+// deserialization, and so on).
+
 var NodeType = (function () {
   function NodeType(name, contains, attrs, schema) {
     _classCallCheck(this, NodeType);
 
+    // :: string
+    // The name the node type has in this schema.
     this.name = name;
+    // :: ?string
+    // The kind of nodes this node may contain. `null` means it's a
+    // leaf node.
     this.contains = contains;
+    // :: Object<Attribute>
+    // The attributes allowed on this node type.
     this.attrs = attrs;
+    // :: Schema
+    // A link back to the [`Schema`](#Schema) the node type belongs to.
     this.schema = schema;
     this.defaultAttrs = null;
   }
 
+  // :: Object<Attribute>
+  // The default set of attributes to associate with a given type. Note
+  // that schemas may add additional attributes to instances of the
+  // type.
+
+  // :: bool
+  // True if this is a block type.
+
   _createClass(NodeType, [{
+    key: "canContainFragment",
+
+    // :: (Fragment) → bool
+    // Test whether the content of the given fragment could be contained
+    // in this node type.
+    value: function canContainFragment(fragment) {
+      var _this = this;
+
+      var ok = true;
+      fragment.forEach(function (n) {
+        if (!_this.canContain(n)) ok = false;
+      });
+      return ok;
+    }
+
+    // :: (Node) → bool
+    // Test whether the given node could be contained in this node type.
+  }, {
     key: "canContain",
     value: function canContain(node) {
-      return this.canContainType(node.type);
+      if (!this.canContainType(node.type)) return false;
+      for (var i = 0; i < node.marks.length; i++) {
+        if (!this.canContainMark(node.marks[i])) return false;
+      }return true;
     }
+
+    // :: (Mark) → bool
+    // Test whether this node type can contain children with the given
+    // mark.
+  }, {
+    key: "canContainMark",
+    value: function canContainMark(mark) {
+      var contains = this.containsMarks;
+      if (contains === true) return true;
+      if (contains) for (var i = 0; i < contains.length; i++) {
+        if (contains[i] == mark.name) return true;
+      }return false;
+    }
+
+    // :: (NodeType) → bool
+    // Test whether this node type can contain nodes of the given node
+    // type.
   }, {
     key: "canContainType",
     value: function canContainType(type) {
       return this.schema.subKind(type.name, this.contains);
     }
+
+    // :: (NodeType) → bool
+    // Test whether the nodes that can be contained in the given node
+    // type are a subtype of the nodes that can be contained in this
+    // type.
   }, {
-    key: "canContainChildren",
-    value: function canContainChildren(node, liberal) {
-      if (!liberal && !this.schema.subKind(node.type.contains, this.contains)) return false;
-      for (var i = 0; i < node.length; i++) {
-        if (!this.canContain(node.child(i))) return false;
-      }return true;
+    key: "canContainContent",
+    value: function canContainContent(type) {
+      return this.schema.subKind(type.contains, this.contains);
     }
+
+    // :: (NodeType) → [NodeType]
+    // Find a set of intermediate node types, possibly empty, that have
+    // to be inserted between this type and `other` to put a node of
+    // type `other` into this type.
   }, {
     key: "findConnection",
     value: function findConnection(other) {
+      // FIXME be more careful about order, and about chosen nodes
+      // having default attrs
       if (this.canContainType(other)) return [];
 
       var seen = Object.create(null);
@@ -6972,36 +7956,97 @@ var NodeType = (function () {
     value: function buildAttrs(attrs, content) {
       if (!attrs && this.defaultAttrs) return this.defaultAttrs;else return _buildAttrs(this.attrs, attrs, this, content);
     }
+
+    // :: (?Object, ?Fragment, ?[Mark]) → Node
+    // Create a [`Node`](#Node) of this type. The given attributes are
+    // checked and defaulted (you can pass `null` to use the type's
+    // defaults entirely, if no required attributes exist). `content`
+    // may be a [`Fragment`](#Fragment), a node, an array of nodes, or
+    // `null`. Similarly `marks` may be `null` to default to the empty
+    // set of marks.
   }, {
     key: "create",
-    value: function create(attrs, content, styles) {
-      return new this.instance(this, this.buildAttrs(attrs, content), content, styles);
+    value: function create(attrs, content, marks) {
+      return new _node.Node(this, this.buildAttrs(attrs, content), _fragment.Fragment.from(content), marks);
     }
   }, {
     key: "createAutoFill",
-    value: function createAutoFill(attrs, content, styles) {
+    value: function createAutoFill(attrs, content, marks) {
       if ((!content || content.length == 0) && !this.canBeEmpty) content = this.defaultContent();
-      return this.create(attrs, content, styles);
+      return this.create(attrs, content, marks);
     }
+
+    // :: bool
+    // Controls whether this node is allowed to be empty.
   }, {
-    key: "locked",
+    key: "isBlock",
     get: function get() {
       return false;
     }
+
+    // :: bool
+    // True if this is a textblock type, a block that contains inline
+    // content.
   }, {
     key: "isTextblock",
     get: function get() {
       return false;
     }
+
+    // :: bool
+    // True if this is an inline type.
+  }, {
+    key: "isInline",
+    get: function get() {
+      return false;
+    }
+
+    // :: bool
+    // True if this is the text node type.
+  }, {
+    key: "isText",
+    get: function get() {
+      return false;
+    }
+
+    // :: bool
+    // Controls whether nodes of this type can be selected (as a user
+    // node selection).
   }, {
     key: "selectable",
     get: function get() {
       return true;
     }
+
+    // :: bool
+    // Controls whether this node type is locked.
+  }, {
+    key: "locked",
+    get: function get() {
+      return false;
+    }
+
+    // :: string
+    // Controls the _kind_ of the node, which is used to determine valid
+    // parent/child relations. Can be a word, which adds that kind to
+    // the set of kinds of the superclass, a word followed by a dot, to
+    // ignore the kinds of the superclass and use only that word (along
+    // with the node's name) as kind, or only a dot, in which case the
+    // only kind the node has is its own name.
   }, {
     key: "canBeEmpty",
     get: function get() {
       return true;
+    }
+  }, {
+    key: "containsMarks",
+
+    // :: union<bool, [string]>
+    // The mark types that child nodes of this node may have. `false`
+    // means no marks, `true` means any mark, and an array of strings
+    // can be used to explicitly list the allowed mark types.
+    get: function get() {
+      return false;
     }
   }], [{
     key: "compile",
@@ -7025,10 +8070,17 @@ var NodeType = (function () {
         types[_name4].defaultAttrs = getDefaultAttrs(types[_name4].attrs);
       }return result;
     }
+
+    // :: (string, *)
+    // Register a metadata element for this type. That is, add `value`
+    // to the array under the property name `name` on the type's
+    // prototype, creating the array if it wasn't already there. This is
+    // mostly used to attach things like commands and parsing strategies
+    // to node type.
   }, {
     key: "register",
-    value: function register(prop, value) {
-      ;(this.prototype[prop] || (this.prototype[prop] = [])).push(value);
+    value: function register(name, value) {
+      ;(this.prototype[name] || (this.prototype[name] = [])).push(value);
     }
   }, {
     key: "kind",
@@ -7041,8 +8093,9 @@ var NodeType = (function () {
 })();
 
 exports.NodeType = NodeType;
-
 NodeType.attributes = {};
+
+// ;; Base type for block nodetypes.
 
 var Block = (function (_NodeType) {
   _inherits(Block, _NodeType);
@@ -7053,6 +8106,8 @@ var Block = (function (_NodeType) {
     _get(Object.getPrototypeOf(Block.prototype), "constructor", this).apply(this, arguments);
   }
 
+  // ;; Base type for textblock node types.
+
   _createClass(Block, [{
     key: "defaultContent",
     value: function defaultContent() {
@@ -7060,13 +8115,8 @@ var Block = (function (_NodeType) {
       var conn = this.findConnection(inner.type);
       if (!conn) SchemaError.raise("Can't create default content for " + this.name);
       for (var i = conn.length - 1; i >= 0; i--) {
-        inner = conn[i].create(null, [inner]);
-      }return [inner];
-    }
-  }, {
-    key: "instance",
-    get: function get() {
-      return _node.BlockNode;
+        inner = conn[i].create(null, inner);
+      }return _fragment.Fragment.from(inner);
     }
   }, {
     key: "isBlock",
@@ -7104,31 +8154,10 @@ var Textblock = (function (_Block) {
     _get(Object.getPrototypeOf(Textblock.prototype), "constructor", this).apply(this, arguments);
   }
 
-  _createClass(Textblock, [{
-    key: "canContain",
-    value: function canContain(node) {
-      var _this = this;
+  // ;; Base type for inline node types.
 
-      return _get(Object.getPrototypeOf(Textblock.prototype), "canContain", this).call(this, node) && node.styles.every(function (s) {
-        return _this.canContainStyle(s);
-      });
-    }
-  }, {
-    key: "canContainStyle",
-    value: function canContainStyle(type) {
-      var contains = this.containsStyles;
-      if (contains === true) return true;
-      if (contains) for (var i = 0; i < contains.length; i++) {
-        if (contains[i] == type.name) return true;
-      }return false;
-    }
-  }, {
-    key: "instance",
-    get: function get() {
-      return _node.TextblockNode;
-    }
-  }, {
-    key: "containsStyles",
+  _createClass(Textblock, [{
+    key: "containsMarks",
     get: function get() {
       return true;
     }
@@ -7163,10 +8192,12 @@ var Inline = (function (_NodeType2) {
     _get(Object.getPrototypeOf(Inline.prototype), "constructor", this).apply(this, arguments);
   }
 
+  // ;; The text node type.
+
   _createClass(Inline, [{
-    key: "instance",
+    key: "isInline",
     get: function get() {
-      return _node.InlineNode;
+      return true;
     }
   }], [{
     key: "contains",
@@ -7196,15 +8227,24 @@ var Text = (function (_Inline) {
 
   // Attribute descriptors
 
+  // ;; Attributes are named strings associated with nodes and marks.
+  // Each node type or mark type has a fixed set of attributes, which
+  // instances of this class are used to control.
+
   _createClass(Text, [{
-    key: "instance",
-    get: function get() {
-      return _node.TextNode;
+    key: "create",
+    value: function create(attrs, content, marks) {
+      return new _node.TextNode(this, this.buildAttrs(attrs, content), content, marks);
     }
   }, {
     key: "selectable",
     get: function get() {
       return false;
+    }
+  }, {
+    key: "isText",
+    get: function get() {
+      return true;
     }
   }]);
 
@@ -7213,7 +8253,24 @@ var Text = (function (_Inline) {
 
 exports.Text = Text;
 
-var Attribute = function Attribute() {
+var Attribute =
+// :: (Object)
+// Create an attribute. `options` is an object containing the
+// settings for the attributes. The following settings are
+// supported:
+//
+// **`default`**: `?string`
+// : The default value for this attribute, to choose when no
+//   explicit value is provided.
+//
+// **`compute`**: `?(Fragment) → string`
+// : A function that computes a default value for the attribute from
+//   the node's content.
+//
+// Attributes that have no default or compute property must be
+// provided whenever a node or mark of a type that has them is
+// created.
+function Attribute() {
   var options = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
 
   _classCallCheck(this, Attribute);
@@ -7222,36 +8279,84 @@ var Attribute = function Attribute() {
   this.compute = options.compute;
 }
 
-// Styles
+// Marks
 
+// ;; Like nodes, marks (which are associated with nodes to signify
+// things like emphasis or being part of a link) are tagged with type
+// objects, which are instantiated once per [Schema](#Schema).
 ;
 
 exports.Attribute = Attribute;
 
-var StyleType = (function () {
-  function StyleType(name, attrs, rank, schema) {
-    _classCallCheck(this, StyleType);
+var MarkType = (function () {
+  function MarkType(name, attrs, rank, schema) {
+    _classCallCheck(this, MarkType);
 
+    // :: string
+    // The name of the mark type.
     this.name = name;
+    // :: Object<Attribute>
+    // The attributes supported by this type of mark.
     this.attrs = attrs;
     this.rank = rank;
+    // :: Schema
+    // The schema that this mark type instance is part of.
     this.schema = schema;
     var defaults = getDefaultAttrs(this.attrs);
-    this.instance = defaults && new _style.StyleMarker(this, defaults);
+    this.instance = defaults && new _mark.Mark(this, defaults);
   }
 
-  _createClass(StyleType, [{
+  // :: Object<Attribute>
+  // The default set of attributes to associate with a mark type. By
+  // default, this returns an empty object.
+
+  // :: number
+  // Mark type ranks are used to determine the order in which mark
+  // arrays are sorted. (If multiple mark types end up with the same
+  // rank, they still get a fixed order in the schema, but there's no
+  // guarantee what it will be.)
+
+  _createClass(MarkType, [{
     key: "create",
+
+    // :: (Object) → Mark
+    // Create a mark of this type. `attrs` may be `null` or an object
+    // containing only some of the mark's attributes. The others, if
+    // they have defaults, will be added.
     value: function create(attrs) {
       if (!attrs && this.instance) return this.instance;
-      return new _style.StyleMarker(this, _buildAttrs(this.attrs, attrs, this));
+      return new _mark.Mark(this, _buildAttrs(this.attrs, attrs, this));
     }
+  }, {
+    key: "removeFromSet",
+
+    // :: ([Mark]) → [Mark]
+    // When there is a mark of this type in the given set, a new set
+    // without it is returned. Otherwise, the input set is returned.
+    value: function removeFromSet(set) {
+      for (var i = 0; i < set.length; i++) if (set[i].type == this) return set.slice(0, i).concat(set.slice(i + 1));
+      return set;
+    }
+
+    // :: ([Mark]) → bool
+    // Tests whether there is a mark of this type in the given set.
+  }, {
+    key: "isInSet",
+    value: function isInSet(set) {
+      for (var i = 0; i < set.length; i++) {
+        if (set[i].type == this) return set[i];
+      }
+    }
+
+    // :: (string, *)
+    // Register a metadata element for this mark type. Adds `value` to
+    // the array under the property name `name` on the type's prototype.
   }], [{
     key: "getOrder",
-    value: function getOrder(styles) {
+    value: function getOrder(marks) {
       var sorted = [];
-      for (var _name5 in styles) {
-        sorted.push({ name: _name5, rank: styles[_name5].type.rank });
+      for (var _name5 in marks) {
+        sorted.push({ name: _name5, rank: marks[_name5].type.rank });
       }sorted.sort(function (a, b) {
         return a.rank - b.rank;
       });
@@ -7262,11 +8367,11 @@ var StyleType = (function () {
     }
   }, {
     key: "compile",
-    value: function compile(styles, schema) {
-      var order = this.getOrder(styles);
+    value: function compile(marks, schema) {
+      var order = this.getOrder(marks);
       var result = Object.create(null);
-      for (var _name6 in styles) {
-        var info = styles[_name6];
+      for (var _name6 in marks) {
+        var info = marks[_name6];
         var attrs = info.attributes || info.type.attributes;
         result[_name6] = new info.type(_name6, attrs, order[_name6], schema);
       }
@@ -7274,8 +8379,8 @@ var StyleType = (function () {
     }
   }, {
     key: "register",
-    value: function register(prop, value) {
-      ;(this.prototype[prop] || (this.prototype[prop] = [])).push(value);
+    value: function register(name, value) {
+      ;(this.prototype[name] || (this.prototype[name] = [])).push(value);
     }
   }, {
     key: "rank",
@@ -7284,12 +8389,11 @@ var StyleType = (function () {
     }
   }]);
 
-  return StyleType;
+  return MarkType;
 })();
 
-exports.StyleType = StyleType;
-
-StyleType.attributes = {};
+exports.MarkType = MarkType;
+MarkType.attributes = {};
 
 // Schema specifications are data structures that specify a schema --
 // a set of node types, their names, attributes, and nesting behavior.
@@ -7323,12 +8427,31 @@ function overlayObj(obj, overlay) {
   return copy;
 }
 
+// FIXME clean up handling of attributes, finish documentation.
+
+// ;; A schema specification is a blueprint for an actual
+// [`Schema`](#Schema). It maps names to node and mark types, along
+// with extra information, such as additional attributes and changes
+// to node kinds and relations.
+//
+// A specification consists of an object that maps node names to node
+// type constructors and another similar object mapping mark names to
+// mark type constructors.
+
 var SchemaSpec = (function () {
-  function SchemaSpec(nodes, styles) {
+  // :: (?Object<{type: NodeType}>, ?Object<{type: MarkType}>)
+
+  // Create a schema specification from scratch. The arguments map
+  // node names to node type constructors and mark names to mark type
+  // constructors. Their property value should be either the type
+  // constructors themselves, or objects with a type constructor under
+  // their `type` property, and optionally other properties.
+
+  function SchemaSpec(nodes, marks) {
     _classCallCheck(this, SchemaSpec);
 
     this.nodes = nodes ? copyObj(nodes, ensureWrapped) : Object.create(null);
-    this.styles = styles ? copyObj(styles, ensureWrapped) : Object.create(null);
+    this.marks = marks ? copyObj(marks, ensureWrapped) : Object.create(null);
   }
 
   // For node types where all attrs have a default value (or which don't
@@ -7339,7 +8462,7 @@ var SchemaSpec = (function () {
   _createClass(SchemaSpec, [{
     key: "updateNodes",
     value: function updateNodes(nodes) {
-      return new SchemaSpec(overlayObj(this.nodes, nodes), this.styles);
+      return new SchemaSpec(overlayObj(this.nodes, nodes), this.marks);
     }
   }, {
     key: "addAttribute",
@@ -7352,12 +8475,12 @@ var SchemaSpec = (function () {
           info.attributes[attrName] = attrInfo;
         }
       }
-      return new SchemaSpec(copy, this.styles);
+      return new SchemaSpec(copy, this.marks);
     }
   }, {
-    key: "updateStyles",
-    value: function updateStyles(styles) {
-      return new SchemaSpec(this.nodes, overlayObj(this.styles, styles));
+    key: "updateMarks",
+    value: function updateMarks(marks) {
+      return new SchemaSpec(this.nodes, overlayObj(this.marks, marks));
     }
   }]);
 
@@ -7388,39 +8511,74 @@ function _buildAttrs(attrSpec, attrs, arg1, arg2) {
   return built;
 }
 
-/**
- * Document schema class.
- */
+// ;; Each document is based on a single schema, which provides the
+// node and mark types that it is made up of (which, in turn,
+// determine the structure it is allowed to have).
 
 var Schema = (function () {
-  function Schema(spec, styles) {
+  // :: (SchemaSpec)
+  // Construct a schema from a specification.
+
+  function Schema(spec) {
     _classCallCheck(this, Schema);
 
-    if (!(spec instanceof SchemaSpec)) spec = new SchemaSpec(spec, styles);
+    // :: SchemaSpec
+    // The specification on which the schema is based.
     this.spec = spec;
     this.kinds = Object.create(null);
+    // :: Object<NodeType>
+    // An object mapping the schema's node names to node type objects.
     this.nodes = NodeType.compile(spec.nodes, this);
-    this.styles = StyleType.compile(spec.styles, this);
+    // :: Object<MarkType>
+    // A map from mark names to mark type objects.
+    this.marks = MarkType.compile(spec.marks, this);
+    // :: Object
+    // An object for storing whatever values modules may want to
+    // compute and cache per schema. (If you want to store something
+    // in it, try to use property names unlikely to clash.)
     this.cached = Object.create(null);
 
     this.node = this.node.bind(this);
     this.text = this.text.bind(this);
     this.nodeFromJSON = this.nodeFromJSON.bind(this);
-    this.styleFromJSON = this.styleFromJSON.bind(this);
+    this.markFromJSON = this.markFromJSON.bind(this);
   }
+
+  // FIXME normalize mark arrays passed to these methods
+
+  // :: (union<string, NodeType>, ?Object, ?union<Fragment, Node, [Node]>, ?[Mark]) → Node
+  // Create a node in this schema. The `type` may be a string or a
+  // [`NodeType`](#NodeType) instance. Attributes will be extended
+  // with defaults, `content` may be a [`Fragment`](#Fragment),
+  // `null`, a [`Node`](#Node), or an array of nodes.
+  //
+  // When creating a text node, `content` should be a string and is
+  // interpreted as the node's text.
+  //
+  // This method is bound to the Schema, meaning you don't have to
+  // call it as a method, but can pass it to higher-order functions
+  // and such.
 
   _createClass(Schema, [{
     key: "node",
-    value: function node(type, attrs, content, styles) {
+    value: function node(type, attrs, content, marks) {
       if (typeof type == "string") type = this.nodeType(type);else if (!(type instanceof NodeType)) SchemaError.raise("Invalid node type: " + type);else if (type.schema != this) SchemaError.raise("Node type from different schema used (" + type.name + ")");
 
-      return type.create(attrs, content, styles);
+      return type.create(attrs, content, marks);
     }
+
+    // :: (string, ?[Mark]) → Node
+    // Create a text node in the schema. This method is bound to the Schema.
   }, {
     key: "text",
-    value: function text(_text, styles) {
-      return this.nodes.text.create(null, _text, styles);
+    value: function text(_text, marks) {
+      return this.nodes.text.create(null, _text, marks);
     }
+
+    // :: () → ?NodeType
+    // Return the default textblock type for this schema, or `null` if
+    // it does not contain a node type with a `defaultTextblock`
+    // property.
   }, {
     key: "defaultTextblockType",
     value: function defaultTextblockType() {
@@ -7431,29 +8589,46 @@ var Schema = (function () {
       }
       return this.cached.defaultTextblockType = null;
     }
+
+    // :: (string, ?Object) → Mark
+    // Create a mark with the named type
   }, {
-    key: "style",
-    value: function style(name, attrs) {
-      var spec = this.styles[name] || SchemaError.raise("No style named " + name);
+    key: "mark",
+    value: function mark(name, attrs) {
+      var spec = this.marks[name] || SchemaError.raise("No mark named " + name);
       return spec.create(attrs);
     }
+
+    // :: (Object) → Node
+    // Deserialize a node from its JSON representation. This method is
+    // bound.
   }, {
     key: "nodeFromJSON",
     value: function nodeFromJSON(json) {
-      var type = this.nodeType(json.type);
-      return type.create(json.attrs, json.text || json.content && json.content.map(this.nodeFromJSON), json.styles && json.styles.map(this.styleFromJSON));
+      return _node.Node.fromJSON(this, json);
     }
+
+    // :: (Object) → Mark
+    // Deserialize a mark from its JSON representation. This method is
+    // bound.
   }, {
-    key: "styleFromJSON",
-    value: function styleFromJSON(json) {
-      if (typeof json == "string") return this.style(json);
-      return this.style(json._, json);
+    key: "markFromJSON",
+    value: function markFromJSON(json) {
+      if (typeof json == "string") return this.mark(json);
+      return this.mark(json._, json);
     }
+
+    // :: (string) → NodeType
+    // Get the [`NodeType`](#NodeType) associated with the given name in
+    // this schema, or raise an error if it does not exist.
   }, {
     key: "nodeType",
     value: function nodeType(name) {
       return this.nodes[name] || SchemaError.raise("Unknown node type: " + name);
     }
+
+    // :: (string, string) → bool
+    // Test whether a node kind is a subkind of another kind.
   }, {
     key: "subKind",
     value: function subKind(sub, sup) {
@@ -7470,227 +8645,7 @@ var Schema = (function () {
 
 exports.Schema = Schema;
 
-},{"../util/error":48,"./node":27,"./style":31}],30:[function(require,module,exports){
-"use strict";
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.childrenBefore = childrenBefore;
-exports.sliceBefore = sliceBefore;
-exports.childrenAfter = childrenAfter;
-exports.sliceAfter = sliceAfter;
-exports.childrenBetween = childrenBetween;
-exports.sliceBetween = sliceBetween;
-exports.siblingRange = siblingRange;
-
-var _pos = require("./pos");
-
-// FIXME move to node methods
-
-function childrenBefore(node, pos) {
-  var depth = arguments.length <= 2 || arguments[2] === undefined ? 0 : arguments[2];
-
-  if (depth == pos.depth) return node.slice(0, pos.offset);
-
-  var n = pos.path[depth];
-  return node.slice(0, n).concat(sliceBefore(node.child(n), pos, depth + 1));
-}
-
-function sliceBefore(node, pos) {
-  var depth = arguments.length <= 2 || arguments[2] === undefined ? 0 : arguments[2];
-
-  return node.copy(childrenBefore(node, pos, depth));
-}
-
-function childrenAfter(node, pos) {
-  var depth = arguments.length <= 2 || arguments[2] === undefined ? 0 : arguments[2];
-
-  if (depth == pos.depth) return node.slice(pos.offset);
-  var n = pos.path[depth];
-  var content = node.slice(n + 1);
-  content.unshift(sliceAfter(node.child(n), pos, depth + 1));
-  return content;
-}
-
-function sliceAfter(node, pos) {
-  var depth = arguments.length <= 2 || arguments[2] === undefined ? 0 : arguments[2];
-
-  return node.copy(childrenAfter(node, pos, depth));
-}
-
-function childrenBetween(node, from, to) {
-  var depth = arguments.length <= 3 || arguments[3] === undefined ? 0 : arguments[3];
-
-  var fromEnd = depth == from.depth,
-      toEnd = depth == to.depth;
-  if (fromEnd && toEnd) return node.slice(from.offset, to.offset);
-  if (!fromEnd && !toEnd && from.path[depth] == to.path[depth]) return [sliceBetween(node.child(from.path[depth]), from, to, false, depth + 1)];
-
-  var content = [],
-      start = undefined;
-  if (!fromEnd) {
-    start = from.path[depth] + 1;
-    content.push(sliceAfter(node.child(start - 1), from, depth + 1));
-  } else {
-    start = from.offset;
-  }
-  var end = toEnd ? to.offset : to.path[depth];
-  var between = node.slice(start, end);
-  for (var i = 0; i < between.length; i++) {
-    content.push(between[i]);
-  }if (!toEnd) content.push(sliceBefore(node.child(end), to, depth + 1));
-  return content;
-}
-
-function sliceBetween(node, from, to) {
-  var collapse = arguments.length <= 3 || arguments[3] === undefined ? true : arguments[3];
-  var depth = arguments.length <= 4 || arguments[4] === undefined ? 0 : arguments[4];
-
-  if (depth < from.depth && depth < to.depth && from.path[depth] == to.path[depth]) {
-    var inner = sliceBetween(node.child(from.path[depth]), from, to, collapse, depth + 1);
-    if (!collapse) return node.copy([inner]);
-    if (node.type.name != "doc") return inner;
-    var conn = node.type.findConnection(inner.type);
-    for (var i = conn.length - 1; i >= 0; i--) {
-      inner = node.type.schema.node(conn[i], null, [inner]);
-    }return node.copy([inner]);
-  } else {
-    return node.copy(childrenBetween(node, from, to, depth));
-  }
-}
-
-function siblingRange(doc, from, to) {
-  for (var i = 0, node = doc;; i++) {
-    if (node.isTextblock) {
-      var path = from.path.slice(0, i - 1),
-          offset = from.path[i - 1];
-      return { from: new _pos.Pos(path, offset), to: new _pos.Pos(path, offset + 1) };
-    }
-    var fromEnd = i == from.path.length,
-        toEnd = i == to.path.length;
-    var left = fromEnd ? from.offset : from.path[i];
-    var right = toEnd ? to.offset : to.path[i];
-    if (fromEnd || toEnd || left != right) {
-      var path = from.path.slice(0, i);
-      return { from: new _pos.Pos(path, left), to: new _pos.Pos(path, right + (toEnd ? 0 : 1)) };
-    }
-    node = node.child(left);
-  }
-}
-
-},{"./pos":28}],31:[function(require,module,exports){
-"use strict";
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-
-var _createClass = (function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
-
-exports.removeStyle = removeStyle;
-exports.sameStyles = sameStyles;
-exports.containsStyle = containsStyle;
-exports.spanStylesAt = spanStylesAt;
-exports.rangeHasStyle = rangeHasStyle;
-
-function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) arr2[i] = arr[i]; return arr2; } else { return Array.from(arr); } }
-
-function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
-
-var StyleMarker = (function () {
-  function StyleMarker(type, attrs) {
-    _classCallCheck(this, StyleMarker);
-
-    this.type = type;
-    this.attrs = attrs;
-  }
-
-  _createClass(StyleMarker, [{
-    key: "toJSON",
-    value: function toJSON() {
-      if (this.type.instance) return this.type.name;
-      var obj = { _: this.type.name };
-      for (var attr in this.attrs) {
-        obj[attr] = this.attrs[attr];
-      }return obj;
-    }
-  }, {
-    key: "addToSet",
-    value: function addToSet(set) {
-      for (var i = 0; i < set.length; i++) {
-        var other = set[i];
-        if (other.type == this.type) {
-          if (this.eq(other)) return set;else return [].concat(_toConsumableArray(set.slice(0, i)), [this], _toConsumableArray(set.slice(i + 1)));
-        }
-        if (other.type.rank > this.type.rank) return [].concat(_toConsumableArray(set.slice(0, i)), [this], _toConsumableArray(set.slice(i)));
-      }
-      return set.concat(this);
-    }
-  }, {
-    key: "removeFromSet",
-    value: function removeFromSet(set) {
-      for (var i = 0; i < set.length; i++) if (this.eq(set[i])) return [].concat(_toConsumableArray(set.slice(0, i)), _toConsumableArray(set.slice(i + 1)));
-      return set;
-    }
-  }, {
-    key: "isInSet",
-    value: function isInSet(set) {
-      for (var i = 0; i < set.length; i++) {
-        if (this.eq(set[i])) return true;
-      }return false;
-    }
-  }, {
-    key: "eq",
-    value: function eq(other) {
-      if (this.type != other.type) return false;
-      for (var attr in this.attrs) {
-        if (other.attrs[attr] != this.attrs[attr]) return false;
-      }return true;
-    }
-  }]);
-
-  return StyleMarker;
-})();
-
-exports.StyleMarker = StyleMarker;
-
-function removeStyle(set, type) {
-  for (var i = 0; i < set.length; i++) if (set[i].type == type) return [].concat(_toConsumableArray(set.slice(0, i)), _toConsumableArray(set.slice(i + 1)));
-  return set;
-}
-
-function sameStyles(a, b) {
-  if (a.length != b.length) return false;
-  for (var i = 0; i < a.length; i++) {
-    if (!a[i].eq(b[i])) return false;
-  }return true;
-}
-
-function containsStyle(set, type) {
-  for (var i = 0; i < set.length; i++) {
-    if (set[i].type == type) return set[i];
-  }return false;
-}
-
-var empty = [];
-
-function spanStylesAt(doc, pos) {
-  var parent = doc.path(pos.path);
-  if (!parent.isTextblock) return empty;
-  var node = parent.childBefore(pos.offset).node || parent.firstChild;
-  return node ? node.styles : empty;
-}
-
-function rangeHasStyle(doc, from, to, type) {
-  var found = false;
-  doc.inlineNodesBetween(from, to, function (node) {
-    if (containsStyle(node.styles, type)) found = true;
-  });
-  return found;
-}
-
-},{}],32:[function(require,module,exports){
+},{"../util/error":48,"./fragment":26,"./mark":28,"./node":29}],32:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -7737,13 +8692,15 @@ var blockElements = {
   output: true, p: true, pre: true, section: true, table: true, tfoot: true, ul: true
 };
 
+var noMarks = [];
+
 var Context = (function () {
   function Context(schema, topNode) {
     _classCallCheck(this, Context);
 
     this.schema = schema;
     this.stack = [];
-    this.styles = [];
+    this.marks = noMarks;
     this.closing = false;
     this.enter(topNode.type, topNode.attrs);
     this.nodeInfo = nodeInfo(schema);
@@ -7775,9 +8732,9 @@ var Context = (function () {
         if (/\S/.test(value) || _top.type.isTextblock) {
           value = value.replace(/\s+/g, " ");
           if (/^\s/.test(value) && (last = _top.content[_top.content.length - 1]) && last.type.name == "text" && /\s$/.test(last.text)) value = value.slice(1);
-          if (value) this.insert(this.schema.text(value, this.styles));
+          if (value) this.insert(this.schema.text(value, this.marks));
         }
-      } else if (dom.nodeType != 1) {
+      } else if (dom.nodeType != 1 || dom.hasAttribute("pm-ignore")) {
         // Ignore non-text non-element nodes
       } else if (!this.parseNodeType(dom)) {
           this.addAll(dom.firstChild, null);
@@ -7831,7 +8788,7 @@ var Context = (function () {
           }
           for (var j = 0; j < route.length; j++) {
             this.enter(route[j]);
-          }if (this.styles.length) this.styles = [];
+          }if (this.marks.length) this.marks = noMarks;
           break;
         }
       }
@@ -7846,7 +8803,7 @@ var Context = (function () {
   }, {
     key: "enter",
     value: function enter(type, attrs) {
-      if (this.styles.length) this.styles = [];
+      if (this.marks.length) this.marks = noMarks;
       this.stack.push({ type: type, attrs: attrs, content: [] });
     }
   }, {
@@ -7870,14 +8827,14 @@ var Context = (function () {
         var n = this.stack.length - 1,
             one = this.stack[n],
             two = stack[n];
-        if ((0, _model.compareMarkup)(one.type, two.type, one.attrs, two.attrs)) break;
+        if (one.type == two.type && _model.Node.sameAttrs(one.attrs, two.attrs)) break;
         this.leave();
       }
       while (stack.length > this.stack.length) {
         var add = stack[this.stack.length];
         this.enter(add.type, add.attrs);
       }
-      if (this.styles.length) this.styles = [];
+      if (this.marks.length) this.marks = noMarks;
       this.closing = false;
     }
   }, {
@@ -7911,8 +8868,8 @@ function summarizeNodeInfo(schema) {
 
   for (var _name2 in schema.nodes) {
     read(schema.nodes[_name2]);
-  }for (var _name3 in schema.styles) {
-    read(schema.styles[_name3]);
+  }for (var _name3 in schema.marks) {
+    read(schema.marks[_name3]);
   }for (var tag in tags) {
     tags[tag].sort(function (a, b) {
       return a.rank - b.rank;
@@ -7968,7 +8925,7 @@ _model.OrderedList.register("parseDOM", { tag: "ol", parse: function parse(dom, 
 _model.ListItem.register("parseDOM", { tag: "li", parse: wrap });
 
 _model.HardBreak.register("parseDOM", { tag: "br", parse: function parse(dom, context, type) {
-    if (!dom.hasAttribute("pm-force-br")) context.insertFrom(dom, type, null, null, context.styles);
+    context.insertFrom(dom, type, null, null, context.marks);
   } });
 
 _model.Image.register("parseDOM", { tag: "img", parse: function parse(dom, context, type) {
@@ -7982,27 +8939,27 @@ _model.Image.register("parseDOM", { tag: "img", parse: function parse(dom, conte
 // Inline style tokens
 
 function inline(dom, context, style) {
-  var old = context.styles;
-  context.styles = (style.instance || style).addToSet(old);
+  var old = context.marks;
+  context.marks = (style.instance || style).addToSet(old);
   context.addAll(dom.firstChild, null);
-  context.styles = old;
+  context.marks = old;
 }
 
-_model.LinkStyle.register("parseDOM", { tag: "a", parse: function parse(dom, context, style) {
+_model.LinkMark.register("parseDOM", { tag: "a", parse: function parse(dom, context, style) {
     var href = dom.getAttribute("href");
     if (!href) return false;
     inline(dom, context, style.create({ href: href, title: dom.getAttribute("title") }));
   } });
 
-_model.EmStyle.register("parseDOM", { tag: "i", parse: inline });
-_model.EmStyle.register("parseDOM", { tag: "em", parse: inline });
+_model.EmMark.register("parseDOM", { tag: "i", parse: inline });
+_model.EmMark.register("parseDOM", { tag: "em", parse: inline });
 
-_model.StrongStyle.register("parseDOM", { tag: "b", parse: inline });
-_model.StrongStyle.register("parseDOM", { tag: "strong", parse: inline });
+_model.StrongMark.register("parseDOM", { tag: "b", parse: inline });
+_model.StrongMark.register("parseDOM", { tag: "strong", parse: inline });
 
-_model.CodeStyle.register("parseDOM", { tag: "code", parse: inline });
+_model.CodeMark.register("parseDOM", { tag: "code", parse: inline });
 
-},{"../model":26,"./index":33}],33:[function(require,module,exports){
+},{"../model":27,"./index":33}],33:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -8068,147 +9025,161 @@ function fromText(schema, text) {
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
+
+var _createClass = (function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
+
 exports.toDOM = toDOM;
 exports.toHTML = toHTML;
 exports.renderNodeToDOM = renderNodeToDOM;
-exports.wrap = wrap;
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 var _model = require("../model");
 
 var _index = require("./index");
 
-var doc = null;
-
-function elt(tag, attrs) {
-  var result = doc.createElement(tag);
-  if (attrs) for (var _name in attrs) {
-    if (_name == "style") result.style.cssText = attrs[_name];else if (attrs[_name]) result.setAttribute(_name, attrs[_name]);
-  }
-
-  for (var _len = arguments.length, args = Array(_len > 2 ? _len - 2 : 0), _key = 2; _key < _len; _key++) {
-    args[_key - 2] = arguments[_key];
-  }
-
-  for (var i = 0; i < args.length; i++) {
-    result.appendChild(typeof args[i] == "string" ? doc.createTextNode(args[i]) : args[i]);
-  }return result;
-}
-
 // declare_global: window
+
+var DOMSerializer = (function () {
+  function DOMSerializer(options) {
+    _classCallCheck(this, DOMSerializer);
+
+    this.options = options || {};
+    this.doc = this.options.document || window.document;
+  }
+
+  _createClass(DOMSerializer, [{
+    key: "elt",
+    value: function elt(tag, attrs) {
+      var result = this.doc.createElement(tag);
+      if (attrs) for (var _name in attrs) {
+        if (_name == "style") result.style.cssText = attrs[_name];else if (attrs[_name]) result.setAttribute(_name, attrs[_name]);
+      }
+
+      for (var _len = arguments.length, args = Array(_len > 2 ? _len - 2 : 0), _key = 2; _key < _len; _key++) {
+        args[_key - 2] = arguments[_key];
+      }
+
+      for (var i = 0; i < args.length; i++) {
+        result.appendChild(typeof args[i] == "string" ? this.doc.createTextNode(args[i]) : args[i]);
+      }return result;
+    }
+  }, {
+    key: "renderNode",
+    value: function renderNode(node, offset) {
+      var dom = node.type.serializeDOM(node, this);
+      for (var attr in node.type.attrs) {
+        var desc = node.type.attrs[attr];
+        if (desc.serializeDOM) desc.serializeDOM(dom, node.attrs[attr], this, node);
+      }
+      if (this.options.onRender) dom = this.options.onRender(node, dom, offset) || dom;
+      return dom;
+    }
+  }, {
+    key: "renderContent",
+    value: function renderContent(node, where) {
+      if (!where) where = this.doc.createDocumentFragment();
+      if (!node.isTextblock) this.renderBlocksInto(node, where);else if (this.options.renderInlineFlat) this.renderInlineFlatInto(node, where);else this.renderInlineInto(node, where);
+      return where;
+    }
+  }, {
+    key: "renderBlocksInto",
+    value: function renderBlocksInto(parent, where) {
+      for (var i = parent.iter(), child = undefined; child = i.next().value;) {
+        if (this.options.path) this.options.path.push(i.offset - child.width);
+        where.appendChild(this.renderNode(child, i.offset - child.width));
+        if (this.options.path) this.options.path.pop();
+      }
+    }
+  }, {
+    key: "renderInlineInto",
+    value: function renderInlineInto(parent, where) {
+      var _this = this;
+
+      var top = where;
+      var active = [];
+      parent.forEach(function (node, offset) {
+        var keep = 0;
+        for (; keep < Math.min(active.length, node.marks.length); ++keep) if (!node.marks[keep].eq(active[keep])) break;
+        while (keep < active.length) {
+          active.pop();
+          top = top.parentNode;
+        }
+        while (active.length < node.marks.length) {
+          var add = node.marks[active.length];
+          active.push(add);
+          top = top.appendChild(_this.renderMark(add));
+        }
+        top.appendChild(_this.renderNode(node, offset));
+      });
+    }
+  }, {
+    key: "renderInlineFlatInto",
+    value: function renderInlineFlatInto(parent, where) {
+      var _this2 = this;
+
+      parent.forEach(function (node, start) {
+        var dom = _this2.renderNode(node, start);
+        dom = _this2.wrapInlineFlat(dom, node.marks);
+        dom = _this2.options.renderInlineFlat(node, dom, start) || dom;
+        where.appendChild(dom);
+      });
+    }
+  }, {
+    key: "renderMark",
+    value: function renderMark(mark) {
+      var dom = mark.type.serializeDOM(mark, this);
+      for (var attr in mark.type.attrs) {
+        var desc = mark.type.attrs[attr];
+        if (desc.serializeDOM) desc.serializeDOM(dom, mark.attrs[attr], this);
+      }
+      return dom;
+    }
+  }, {
+    key: "wrapInlineFlat",
+    value: function wrapInlineFlat(dom, marks) {
+      for (var i = marks.length - 1; i >= 0; i--) {
+        var wrap = this.renderMark(marks[i]);
+        wrap.appendChild(dom);
+        dom = wrap;
+      }
+      return dom;
+    }
+  }, {
+    key: "renderAs",
+    value: function renderAs(node, tagName, tagAttrs) {
+      return this.renderContent(node, this.elt(tagName, tagAttrs));
+    }
+  }]);
+
+  return DOMSerializer;
+})();
 
 function toDOM(node) {
   var options = arguments.length <= 1 || arguments[1] === undefined ? {} : arguments[1];
 
-  doc = options.document || window.document;
-  return renderNodes(node.children, options);
+  return new DOMSerializer(options).renderContent(node);
 }
 
 (0, _index.defineTarget)("dom", toDOM);
 
 function toHTML(node, options) {
-  var wrap = (options && options.document || window.document).createElement("div");
-  wrap.appendChild(toDOM(node, options));
+  var serializer = new DOMSerializer(options);
+  var wrap = serializer.elt("div");
+  wrap.appendChild(serializer.renderContent(node));
   return wrap.innerHTML;
 }
 
 (0, _index.defineTarget)("html", toHTML);
 
 function renderNodeToDOM(node, options, offset) {
-  var dom = renderNode(node, options, offset);
-  if (options.renderInlineFlat && node.isInline) {
-    dom = wrapInlineFlat(node, dom, options);
-    dom = options.renderInlineFlat(node, dom, offset) || dom;
+  var serializer = new DOMSerializer(options);
+  var dom = serializer.renderNode(node, offset);
+  if (node.isInline) {
+    dom = serializer.wrapInlineFlat(dom, node.marks);
+    if (serializer.options.renderInlineFlat) dom = options.renderInlineFlat(node, dom, offset) || dom;
   }
   return dom;
-}
-
-function wrap(node, options, type) {
-  var dom = elt(type || node.type.name);
-  if (!node.isTextblock) renderNodesInto(node.children, dom, options);else if (options.renderInlineFlat) renderInlineContentFlat(node, dom, options);else renderInlineContent(node.children, dom, options);
-  return dom;
-}
-
-function wrapIn(type) {
-  return function (node, options) {
-    return wrap(node, options, type);
-  };
-}
-
-function renderNodes(nodes, options) {
-  var frag = doc.createDocumentFragment();
-  renderNodesInto(nodes, frag, options);
-  return frag;
-}
-
-function renderNode(node, options, offset) {
-  var dom = node.type.serializeDOM(node, options);
-  for (var attr in node.type.attrs) {
-    var desc = node.type.attrs[attr];
-    if (desc.serializeDOM) desc.serializeDOM(dom, node.attrs[attr], options, node);
-  }
-  if (options.onRender && node.isBlock) dom = options.onRender(node, dom, offset) || dom;
-  return dom;
-}
-
-function renderNodesInto(nodes, where, options) {
-  for (var i = 0; i < nodes.length; i++) {
-    if (options.path) options.path.push(i);
-    where.appendChild(renderNode(nodes[i], options, i));
-    if (options.path) options.path.pop();
-  }
-}
-
-function renderInlineContent(nodes, where, options) {
-  var top = where;
-  var active = [];
-  for (var i = 0; i < nodes.length; i++) {
-    var node = nodes[i],
-        styles = node.styles;
-    var keep = 0;
-    for (; keep < Math.min(active.length, styles.length); ++keep) if (!styles[keep].eq(active[keep])) break;
-    while (keep < active.length) {
-      active.pop();
-      top = top.parentNode;
-    }
-    while (active.length < styles.length) {
-      var add = styles[active.length];
-      active.push(add);
-      top = top.appendChild(renderStyle(add, options));
-    }
-    top.appendChild(renderNode(node, options, i));
-  }
-}
-
-function renderStyle(marker, options) {
-  var dom = marker.type.serializeDOM(marker, options);
-  for (var attr in marker.type.attrs) {
-    var desc = marker.type.attrs[attr];
-    if (desc.serializeDOM) desc.serializeDOM(dom, marker.attrs[attr], options);
-  }
-  return dom;
-}
-
-function wrapInlineFlat(node, dom, options) {
-  var styles = node.styles;
-  for (var i = styles.length - 1; i >= 0; i--) {
-    var _wrap = renderStyle(styles[i], options);
-    _wrap.appendChild(dom);
-    dom = _wrap;
-  }
-  return dom;
-}
-
-function renderInlineContentFlat(node, where, options) {
-  var offset = 0;
-  for (var i = 0; i < node.length; i++) {
-    var child = node.child(i);
-    var dom = wrapInlineFlat(child, renderNode(child, options, i), options);
-    dom = options.renderInlineFlat(child, dom, offset) || dom;
-    where.appendChild(dom);
-    offset += child.offset;
-  }
-
-  if (!node.type.isCode && (!node.length || where.lastChild.nodeName == "BR")) where.appendChild(elt("br")).setAttribute("pm-force-br", "true");else if (where.lastChild.contentEditable == "false") where.appendChild(doc.createTextNode(""));
 }
 
 // Block nodes
@@ -8217,88 +9188,93 @@ function def(cls, method) {
   cls.prototype.serializeDOM = method;
 }
 
-def(_model.BlockQuote, wrapIn("blockquote"));
+def(_model.BlockQuote, function (node, s) {
+  return s.renderAs(node, "blockquote");
+});
 
 _model.BlockQuote.prototype.clicked = function (_, path, dom, coords) {
   var childBox = dom.firstChild.getBoundingClientRect();
   if (coords.left < childBox.left - 2) return _model.Pos.from(path);
 };
 
-def(_model.BulletList, wrapIn("ul"));
+def(_model.BulletList, function (node, s) {
+  return s.renderAs(node, "ul");
+});
 
-def(_model.OrderedList, function (node, options) {
-  var dom = wrap(node, options, "ol");
-  if (node.attrs.order > 1) dom.setAttribute("start", node.attrs.order);
-  return dom;
+def(_model.OrderedList, function (node, s) {
+  return s.renderAs(node, "ol", { start: node.attrs.order != "1" && node.attrs.order });
 });
 
 _model.OrderedList.prototype.clicked = _model.BulletList.prototype.clicked = function (_, path, dom, coords) {
   for (var i = 0; i < dom.childNodes.length; i++) {
     var child = dom.childNodes[i];
-    if (!child.hasAttribute("pm-path")) continue;
+    if (!child.hasAttribute("pm-offset")) continue;
     var childBox = child.getBoundingClientRect();
     if (coords.left > childBox.left - 2) return null;
     if (childBox.top <= coords.top && childBox.bottom >= coords.top) return new _model.Pos(path, i);
   }
 };
 
-def(_model.ListItem, wrapIn("li"));
-
-def(_model.HorizontalRule, function () {
-  return elt("hr");
+def(_model.ListItem, function (node, s) {
+  return s.renderAs(node, "li");
 });
 
-def(_model.Paragraph, wrapIn("p"));
-
-def(_model.Heading, function (node, options) {
-  return wrap(node, options, "h" + node.attrs.level);
+def(_model.HorizontalRule, function (_, s) {
+  return s.elt("hr");
 });
 
-def(_model.CodeBlock, function (node, options) {
-  var code = wrap(node, options, "code");
+def(_model.Paragraph, function (node, s) {
+  return s.renderAs(node, "p");
+});
+
+def(_model.Heading, function (node, s) {
+  return s.renderAs(node, "h" + node.attrs.level);
+});
+
+def(_model.CodeBlock, function (node, s) {
+  var code = s.renderAs(node, "code");
   if (node.attrs.params != null) code.className = "fence " + node.attrs.params.replace(/(^|\s+)/g, "$&lang-");
-  return elt("pre", null, code);
+  return s.elt("pre", null, code);
 });
 
 // Inline content
 
-def(_model.Text, function (node) {
-  return doc.createTextNode(node.text);
+def(_model.Text, function (node, s) {
+  return s.doc.createTextNode(node.text);
 });
 
-def(_model.Image, function (node) {
-  return elt("img", {
+def(_model.Image, function (node, s) {
+  return s.elt("img", {
     src: node.attrs.src,
     alt: node.attrs.alt,
-    title: node.attrs.title,
-    contentEditable: false
+    title: node.attrs.title
   });
 });
 
-def(_model.HardBreak, function () {
-  return elt("br");
+def(_model.HardBreak, function (_, s) {
+  return s.elt("br");
 });
 
 // Inline styles
 
-def(_model.EmStyle, function () {
-  return elt("em");
+def(_model.EmMark, function (_, s) {
+  return s.elt("em");
 });
 
-def(_model.StrongStyle, function () {
-  return elt("strong");
+def(_model.StrongMark, function (_, s) {
+  return s.elt("strong");
 });
 
-def(_model.CodeStyle, function () {
-  return elt("code");
+def(_model.CodeMark, function (_, s) {
+  return s.elt("code");
 });
 
-def(_model.LinkStyle, function (style) {
-  return elt("a", { href: style.attrs.href,
-    title: style.attrs.title });
+def(_model.LinkMark, function (mark, s) {
+  return s.elt("a", { href: mark.attrs.href,
+    title: mark.attrs.title });
 });
 
-},{"../model":26,"./index":36}],36:[function(require,module,exports){
+},{"../model":27,"./index":36}],36:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -8341,10 +9317,9 @@ var _index = require("./index");
 
 _model.Block.prototype.serializeText = function (node) {
   var accum = "";
-  for (var i = 0; i < node.length; i++) {
-    var child = node.child(i);
-    accum += child.type.serializeText(child);
-  }
+  node.forEach(function (child) {
+    return accum += child.type.serializeText(child);
+  });
   return accum;
 };
 
@@ -8371,7 +9346,7 @@ function toText(doc) {
 
 (0, _index.defineTarget)("text", toText);
 
-},{"../model":26,"./index":36}],38:[function(require,module,exports){
+},{"../model":27,"./index":36}],38:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -8409,7 +9384,7 @@ var _map = require("./map");
 
     var inner = doc.path(from.path);
     for (var i = 0; i < depth; i++) {
-      if (start > 0 || end < doc.path(toParent).maxOffset || toParent.length == 0) return null;
+      if (start > 0 || end < doc.path(toParent).size || toParent.length == 0) return null;
       start = toParent[toParent.length - 1];
       end = start + 1;
       toParent = toParent.slice(0, toParent.length - 1);
@@ -8417,28 +9392,28 @@ var _map = require("./map");
     if (depth == 0 && types.length == 0) return null;
 
     var parent = doc.path(toParent),
-        parentSize = parent.length,
+        parentSize = parent.size,
         newParent = undefined;
     if (parent.type.locked) return null;
     if (types.length) {
       var _ret = (function () {
         var lastWrapper = types[types.length - 1];
-        var content = inner.slice(from.offset, to.offset);
-        if (!parent.type.canContainType(types[0]) || !content.every(function (n) {
-          return lastWrapper.canContain(n);
-        }) || !inner.length && !lastWrapper.canBeEmpty || lastWrapper.locked) return {
+        var content = inner.content.slice(from.offset, to.offset);
+        if (!parent.type.canContainType(types[0]) || content.some(function (n) {
+          return !lastWrapper.canContain(n);
+        }) || !inner.size && !lastWrapper.canBeEmpty || lastWrapper.locked) return {
             v: null
           };
         var node = null;
         for (var i = types.length - 1; i >= 0; i--) {
-          node = types[i].create(attrs[i], node ? [node] : content);
-        }newParent = parent.splice(start, end, [node]);
+          node = types[i].create(attrs[i], node || content);
+        }newParent = parent.splice(start, end, _model.Fragment.from(node));
       })();
 
       if (typeof _ret === "object") return _ret.v;
     } else {
-      if (!parent.type.canContainChildren(inner, true) || !inner.length && start == 0 && end == parent.length && !parent.type.canBeEmpty) return null;
-      newParent = parent.splice(start, end, inner.children);
+      if (!parent.type.canContainFragment(inner.content) || !inner.size && start == 0 && end == parent.size && !parent.type.canBeEmpty) return null;
+      newParent = parent.splice(start, end, inner.content);
     }
     var copy = doc.replaceDeep(toParent, newParent);
 
@@ -8481,7 +9456,7 @@ var _map = require("./map");
   },
   paramFromJSON: function paramFromJSON(schema, json) {
     return { depth: json.depth,
-      wrappers: json.types && json.types.map(function (n) {
+      types: json.types && json.types.map(function (n) {
         return schema.nodeType(n);
       }),
       attrs: json.attrs };
@@ -8495,8 +9470,8 @@ function canBeLifted(doc, range) {
     var parentDepth = -1;
 
     var _loop = function (_node, i) {
-      if (content.every(function (inner) {
-        return _node.type.canContainChildren(inner);
+      if (!content.some(function (inner) {
+        return !_node.type.canContainContent(inner.type);
       })) parentDepth = i;
       _node = _node.child(range.from.path[i]);
       node = _node;
@@ -8507,7 +9482,7 @@ function canBeLifted(doc, range) {
     }
     if (parentDepth > -1) return { path: range.from.path.slice(0, parentDepth), unwrap: unwrap };
     if (unwrap || !content[0].isBlock) return null;
-    content = content[0].slice(range.from.offset, range.to.offset);
+    content = content[0].content.slice(range.from.offset, range.to.offset);
     unwrap = true;
   }
 }
@@ -8530,7 +9505,7 @@ _transform.Transform.prototype.lift = function (from) {
     var rangeNode = found.unwrap && this.doc.path(range.from.path);
 
     for (var d = 0, pos = range.to;; d++) {
-      if (pos.offset < this.doc.path(pos.path).length) {
+      if (pos.offset < this.doc.path(pos.path).size) {
         this.split(pos, depth);
         break;
       }
@@ -8553,8 +9528,8 @@ _transform.Transform.prototype.lift = function (from) {
       for (var i = range.to.offset - 1; i > range.from.offset; i--) {
         this.join(new _model.Pos(range.from.path, i));
       }var size = 0;
-      for (var i = range.from.offset; i < range.to.offset; i++) {
-        size += rangeNode.child(i).length;
+      for (var i = rangeNode.iter(range.from.offset, range.to.offset), child = undefined; child = i.next().value;) {
+        size += child.size;
       }var path = range.from.path.concat(range.from.offset);
       range = { from: new _model.Pos(path, 0), to: new _model.Pos(path, size) };
       ++depth;
@@ -8603,7 +9578,7 @@ function alreadyHasBlockType(doc, from, to, type, attrs) {
   if (!attrs) attrs = {};
   doc.nodesBetween(from, to || from, function (node) {
     if (node.isTextblock) {
-      if (!(0, _model.compareMarkup)(node.type, type, node.attrs, attrs)) found = true;
+      if (node.hasMarkup(type, attrs)) found = true;
       return false;
     }
   });
@@ -8614,11 +9589,11 @@ _transform.Transform.prototype.setBlockType = function (from, to, type, attrs) {
   var _this = this;
 
   this.doc.nodesBetween(from, to || from, function (node, path) {
-    if (node.isTextblock && !(0, _model.compareMarkup)(type, node.type, attrs, node.attrs)) {
+    if (node.isTextblock && !node.hasMarkup(type, attrs)) {
       path = path.slice();
       // Ensure all markup that isn't allowed in the new node type is cleared
-      _this.clearMarkup(new _model.Pos(path, 0), new _model.Pos(path, node.maxOffset), type);
-      _this.step("ancestor", new _model.Pos(path, 0), new _model.Pos(path, _this.doc.path(path).maxOffset), null, { depth: 1, types: [type], attrs: [attrs] });
+      _this.clearMarkup(new _model.Pos(path, 0), new _model.Pos(path, node.size), type);
+      _this.step("ancestor", new _model.Pos(path, 0), new _model.Pos(path, _this.doc.path(path).size), null, { depth: 1, types: [type], attrs: [attrs] });
       return false;
     }
   });
@@ -8626,20 +9601,20 @@ _transform.Transform.prototype.setBlockType = function (from, to, type, attrs) {
 };
 
 _transform.Transform.prototype.setNodeType = function (pos, type, attrs) {
-  var node = this.doc.path(pos.path).child(pos.offset);
+  var node = this.doc.nodeAfter(pos);
   var path = pos.toPath();
-  this.step("ancestor", new _model.Pos(path, 0), new _model.Pos(path, node.maxOffset), null, { depth: 1, types: [type], attrs: [attrs] });
+  this.step("ancestor", new _model.Pos(path, 0), new _model.Pos(path, node.size), null, { depth: 1, types: [type], attrs: [attrs] });
   return this;
 };
 
-},{"../model":26,"./map":41,"./step":44,"./transform":46,"./tree":47}],39:[function(require,module,exports){
+},{"../model":27,"./map":41,"./step":45,"./transform":46,"./tree":47}],39:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
 
-require("./style");
+require("./mark");
 
 require("./split");
 
@@ -8732,7 +9707,7 @@ Object.defineProperty(exports, "Remapping", {
   }
 });
 
-},{"./ancestor":38,"./join":40,"./map":41,"./replace":42,"./split":43,"./step":44,"./style":45,"./transform":46}],40:[function(require,module,exports){
+},{"./ancestor":38,"./join":40,"./map":41,"./mark":42,"./replace":43,"./split":44,"./step":45,"./transform":46}],40:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -8753,7 +9728,7 @@ var _map = require("./map");
   apply: function apply(doc, step) {
     var before = doc.path(step.from.path);
     var after = doc.path(step.to.path);
-    if (step.from.offset < before.maxOffset || step.to.offset > 0 || !before.type.canContainChildren(after, true)) return null;
+    if (step.from.offset < before.size || step.to.offset > 0 || !before.type.canContainFragment(after.content)) return null;
     var pFrom = step.from.path,
         pTo = step.to.path;
     var last = pFrom.length - 1,
@@ -8763,12 +9738,12 @@ var _map = require("./map");
       if (pFrom[i] != pTo[i]) return null;
     }var targetPath = pFrom.slice(0, last);
     var target = doc.path(targetPath),
-        oldSize = target.length;
+        oldSize = target.size;
     if (target.type.locked) return null;
-    var joined = before.append(after.children);
-    var copy = doc.replaceDeep(targetPath, target.splice(offset - 1, offset + 1, [joined]));
+    var joined = before.append(after.content);
+    var copy = doc.replaceDeep(targetPath, target.splice(offset - 1, offset + 1, _model.Fragment.from(joined)));
 
-    var map = new _map.PosMap([new _map.MovedRange(step.to, after.maxOffset, step.from), new _map.MovedRange(new _model.Pos(targetPath, offset + 1), oldSize - offset - 1, new _model.Pos(targetPath, offset))], [new _map.ReplacedRange(step.from, step.to, step.from, step.from, step.to.shorten())]);
+    var map = new _map.PosMap([new _map.MovedRange(step.to, after.size, step.from), new _map.MovedRange(new _model.Pos(targetPath, offset + 1), oldSize - offset - 1, new _model.Pos(targetPath, offset))], [new _map.ReplacedRange(step.from, step.to, step.from, step.from, step.to.shorten())]);
     return new _transform.TransformResult(copy, map);
   },
   invert: function invert(step, oldDoc) {
@@ -8779,7 +9754,7 @@ var _map = require("./map");
 function joinableBlocks(doc, pos) {
   if (pos.offset == 0) return false;
   var parent = doc.path(pos.path);
-  if (parent.isTextblock || pos.offset == parent.length) return false;
+  if (parent.isTextblock || pos.offset == parent.size) return false;
   var type = parent.child(pos.offset - 1).type;
   return !type.isTextblock && type.contains && type == parent.child(pos.offset).type;
 }
@@ -8796,12 +9771,12 @@ function joinPoint(doc, pos) {
 
 _transform.Transform.prototype.join = function (at) {
   var parent = this.doc.path(at.path);
-  if (at.offset == 0 || at.offset == parent.length || parent.isTextblock) return this;
-  this.step("join", new _model.Pos(at.path.concat(at.offset - 1), parent.child(at.offset - 1).maxOffset), new _model.Pos(at.path.concat(at.offset), 0));
+  if (at.offset == 0 || at.offset == parent.size || parent.isTextblock) return this;
+  this.step("join", new _model.Pos(at.path.concat(at.offset - 1), parent.child(at.offset - 1).size), new _model.Pos(at.path.concat(at.offset), 0));
   return this;
 };
 
-},{"../model":26,"./map":41,"./step":44,"./transform":46}],41:[function(require,module,exports){
+},{"../model":27,"./map":41,"./step":45,"./transform":46}],41:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -9108,7 +10083,169 @@ function mapStep(step, remapping) {
   if (!allDeleted) return new _step.Step(step.name, from, to, pos, step.param);
 }
 
-},{"../model":26,"./step":44}],42:[function(require,module,exports){
+},{"../model":27,"./step":45}],42:[function(require,module,exports){
+"use strict";
+
+var _model = require("../model");
+
+var _transform = require("./transform");
+
+var _step = require("./step");
+
+var _tree = require("./tree");
+
+(0, _step.defineStep)("addMark", {
+  apply: function apply(doc, step) {
+    return new _transform.TransformResult((0, _tree.copyStructure)(doc, step.from, step.to, function (node, from, to) {
+      if (!node.type.canContainMark(step.param)) return node;
+      return (0, _tree.copyInline)(node, from, to, function (node) {
+        return node.mark(step.param.addToSet(node.marks));
+      });
+    }));
+  },
+  invert: function invert(step, _oldDoc, map) {
+    return new _step.Step("removeMark", step.from, map.map(step.to).pos, null, step.param);
+  },
+  paramToJSON: function paramToJSON(param) {
+    return param.toJSON();
+  },
+  paramFromJSON: function paramFromJSON(schema, json) {
+    return schema.markFromJSON(json);
+  }
+});
+
+_transform.Transform.prototype.addMark = function (from, to, st) {
+  var _this = this;
+
+  var removed = [],
+      added = [],
+      removing = null,
+      adding = null;
+  this.doc.inlineNodesBetween(from, to, function (_ref, path, start, end, parent) {
+    var marks = _ref.marks;
+
+    if (st.isInSet(marks) || !parent.type.canContainMark(st.type)) {
+      adding = removing = null;
+    } else {
+      var rm = st.type.isInSet(marks);
+      if (rm) {
+        if (removing && removing.param.eq(rm)) {
+          removing.to = new _model.Pos(path, end);
+        } else {
+          removing = new _step.Step("removeMark", new _model.Pos(path, start), new _model.Pos(path, end), null, rm);
+          removed.push(removing);
+        }
+      } else if (removing) {
+        removing = null;
+      }
+      if (adding) {
+        adding.to = new _model.Pos(path, end);
+      } else {
+        adding = new _step.Step("addMark", new _model.Pos(path, start), new _model.Pos(path, end), null, st);
+        added.push(adding);
+      }
+    }
+  });
+  removed.forEach(function (s) {
+    return _this.step(s);
+  });
+  added.forEach(function (s) {
+    return _this.step(s);
+  });
+  return this;
+};
+
+(0, _step.defineStep)("removeMark", {
+  apply: function apply(doc, step) {
+    return new _transform.TransformResult((0, _tree.copyStructure)(doc, step.from, step.to, function (node, from, to) {
+      return (0, _tree.copyInline)(node, from, to, function (node) {
+        return node.mark(step.param.removeFromSet(node.marks));
+      });
+    }));
+  },
+  invert: function invert(step, _oldDoc, map) {
+    return new _step.Step("addMark", step.from, map.map(step.to).pos, null, step.param);
+  },
+  paramToJSON: function paramToJSON(param) {
+    return param.toJSON();
+  },
+  paramFromJSON: function paramFromJSON(schema, json) {
+    return schema.markFromJSON(json);
+  }
+});
+
+_transform.Transform.prototype.removeMark = function (from, to) {
+  var _this2 = this;
+
+  var st = arguments.length <= 2 || arguments[2] === undefined ? null : arguments[2];
+
+  var matched = [],
+      step = 0;
+  this.doc.inlineNodesBetween(from, to, function (_ref2, path, start, end) {
+    var marks = _ref2.marks;
+
+    step++;
+    var toRemove = null;
+    if (st instanceof _model.MarkType) {
+      var found = st.isInSet(marks);
+      if (found) toRemove = [found];
+    } else if (st) {
+      if (st.isInSet(marks)) toRemove = [st];
+    } else {
+      toRemove = marks;
+    }
+    if (toRemove && toRemove.length) {
+      path = path.slice();
+      for (var i = 0; i < toRemove.length; i++) {
+        var rm = toRemove[i],
+            found = undefined;
+        for (var j = 0; j < matched.length; j++) {
+          var m = matched[j];
+          if (m.step == step - 1 && rm.eq(matched[j].style)) found = m;
+        }
+        if (found) {
+          found.to = new _model.Pos(path, end);
+          found.step = step;
+        } else {
+          matched.push({ style: rm, from: new _model.Pos(path, start), to: new _model.Pos(path, end), step: step });
+        }
+      }
+    }
+  });
+  matched.forEach(function (m) {
+    return _this2.step("removeMark", m.from, m.to, null, m.style);
+  });
+  return this;
+};
+
+_transform.Transform.prototype.clearMarkup = function (from, to, newParent) {
+  var _this3 = this;
+
+  var delSteps = []; // Must be accumulated and applied in inverse order
+  this.doc.inlineNodesBetween(from, to, function (_ref3, path, start, end) {
+    var marks = _ref3.marks;
+    var type = _ref3.type;
+
+    if (newParent ? !newParent.canContainType(type) : !type.isText) {
+      path = path.slice();
+      var _from = new _model.Pos(path, start);
+      delSteps.push(new _step.Step("replace", _from, new _model.Pos(path, end), _from));
+      return;
+    }
+    for (var i = 0; i < marks.length; i++) {
+      var mark = marks[i];
+      if (!newParent || !newParent.canContainMark(mark.type)) {
+        path = path.slice();
+        _this3.step("removeMark", new _model.Pos(path, start), new _model.Pos(path, end), null, mark);
+      }
+    }
+  });
+  for (var i = delSteps.length - 1; i >= 0; i--) {
+    this.step(delSteps[i]);
+  }return this;
+};
+
+},{"../model":27,"./step":45,"./transform":46,"./tree":47}],43:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -9133,8 +10270,8 @@ function findMovedChunks(oldNode, oldPath, newNode, startDepth) {
   for (var depth = startDepth;; depth++) {
     var joined = depth == oldPath.depth ? 0 : 1;
     var cut = depth == oldPath.depth ? oldPath.offset : oldPath.path[depth];
-    var afterCut = oldNode.maxOffset - cut;
-    var newOffset = newNode.maxOffset - afterCut;
+    var afterCut = oldNode.size - cut;
+    var newOffset = newNode.size - afterCut;
 
     var from = oldPath.shorten(depth, joined);
     var to = new _model.Pos(newPath, newOffset + joined);
@@ -9152,23 +10289,13 @@ function replace(node, from, to, root, repl) {
   var depth = arguments.length <= 5 || arguments[5] === undefined ? 0 : arguments[5];
 
   if (depth == root.length) {
-    var _ret = (function () {
-      var before = (0, _model.sliceBefore)(node, from, depth);
-      var after = (0, _model.sliceAfter)(node, to, depth),
-          result = undefined;
-      if (!repl.nodes.every(function (n) {
-        return before.type.canContain(n);
-      })) return {
-          v: null
-        };
-      if (repl.nodes.length) result = before.append(repl.nodes, from.depth - depth, repl.openLeft).append(after.children, repl.openRight, to.depth - depth);else result = before.append(after.children, from.depth - depth, to.depth - depth);
-      if (!result.length && !result.type.canBeEmpty) result = result.copy(result.type.defaultContent());
-      return {
-        v: { doc: result, moved: findMovedChunks(node, to, result, depth) }
-      };
-    })();
-
-    if (typeof _ret === "object") return _ret.v;
+    var before = node.sliceBetween(null, from, depth);
+    var after = node.sliceBetween(to, null, depth),
+        result = undefined;
+    if (!before.type.canContainFragment(repl.content)) return null;
+    if (repl.content.size) result = before.append(repl.content, from.depth - depth, repl.openLeft).append(after.content, repl.openRight, to.depth - depth);else result = before.append(after.content, from.depth - depth, to.depth - depth);
+    if (!result.size && !result.type.canBeEmpty) result = result.copy(result.type.defaultContent());
+    return { doc: result, moved: findMovedChunks(node, to, result, depth) };
   } else {
     var pos = root[depth];
     var result = replace(node.child(pos), from, to, root, repl, depth + 1);
@@ -9177,7 +10304,7 @@ function replace(node, from, to, root, repl) {
   }
 }
 
-var nullRepl = { nodes: [], openLeft: 0, openRight: 0 };
+var nullRepl = { content: _model.emptyFragment, openLeft: 0, openRight: 0 };
 
 (0, _step.defineStep)("replace", {
   apply: function apply(doc, step) {
@@ -9198,25 +10325,23 @@ var nullRepl = { nodes: [], openLeft: 0, openRight: 0 };
   invert: function invert(step, oldDoc, map) {
     var depth = step.pos.depth;
     return new _step.Step("replace", step.from, map.map(step.to).pos, step.from.shorten(depth), {
-      nodes: (0, _model.childrenBetween)(oldDoc.path(step.pos.path), step.from, step.to, depth),
+      content: oldDoc.path(step.pos.path).content.sliceBetween(step.from, step.to, depth),
       openLeft: step.from.depth - depth,
       openRight: step.to.depth - depth
     });
   },
   paramToJSON: function paramToJSON(param) {
-    return param && { nodes: param.nodes && param.nodes.map(function (n) {
-        return n.toJSON();
-      }),
+    return param && { content: param.content.size && param.content.toJSON(),
       openLeft: param.openLeft, openRight: param.openRight };
   },
   paramFromJSON: function paramFromJSON(schema, json) {
-    return json && { nodes: json.nodes && json.nodes.map(schema.nodeFromJSON),
+    return json && { content: _model.Fragment.fromJSON(schema, json.content),
       openLeft: json.openLeft, openRight: json.openRight };
   }
 });
 
 function shiftFromStack(stack, depth) {
-  var shifted = stack[depth] = stack[depth].splice(0, 1, []);
+  var shifted = stack[depth] = stack[depth].splice(0, 1, _model.emptyFragment);
   for (var i = depth - 1; i >= 0; i--) {
     shifted = stack[i] = stack[i].replace(0, shifted);
   }
@@ -9224,7 +10349,7 @@ function shiftFromStack(stack, depth) {
 
 // FIXME find a not so horribly confusing way to express this
 function buildInserted(nodesLeft, source, start, end) {
-  var sliced = (0, _model.sliceBetween)(source, start, end, false);
+  var sliced = source.sliceBetween(start, end);
   var nodesRight = [];
   for (var node = sliced, i = 0; i <= start.path.length; i++, node = node.firstChild) {
     nodesRight.push(node);
@@ -9234,8 +10359,8 @@ function buildInserted(nodesLeft, source, start, end) {
   var result = null;
 
   var inner = nodesRight[searchRight];
-  if (inner.isTextblock && inner.length && nodesLeft[searchLeft].isTextblock) {
-    result = nodesLeft[searchLeft--].copy(inner.children);
+  if (inner.isTextblock && inner.size && nodesLeft[searchLeft].isTextblock) {
+    result = nodesLeft[searchLeft--].copy(inner.content);
     --searchRight;
     shiftFromStack(nodesRight, searchRight);
   }
@@ -9247,30 +10372,32 @@ function buildInserted(nodesLeft, source, start, end) {
     var outside = searchRight <= same;
     for (var i = searchLeft; i >= 0; i--) {
       var left = nodesLeft[i];
-      if (outside ? left.type.canContainChildren(node) : left.type == type) {
+      if (outside ? left.type.canContainContent(node.type) : left.type == type) {
         matched = i;
         break;
       }
     }
     if (matched != null) {
       if (!result) {
-        result = nodesLeft[matched].copy(node.children);
+        result = nodesLeft[matched].copy(node.content);
         searchLeft = matched - 1;
       } else {
         while (searchLeft >= matched) {
-          result = nodesLeft[searchLeft].copy(searchLeft == matched ? [result].concat(node.children) : [result]);
+          var wrap = nodesLeft[searchLeft];
+          var content = _model.Fragment.from(result);
+          result = wrap.copy(searchLeft == matched ? content.append(node.content) : content);
           searchLeft--;
         }
       }
     }
-    if (matched != null || node.length == 0) {
+    if (matched != null || node.size == 0) {
       if (outside) break;
       if (searchRight) shiftFromStack(nodesRight, searchRight - 1);
     }
     searchRight--;
   }
 
-  var repl = { nodes: result ? result.children : [],
+  var repl = { content: result ? result.content : _model.emptyFragment,
     openLeft: start.depth - searchRight,
     openRight: end.depth - searchRight };
   return { repl: repl, depth: searchLeft + 1 };
@@ -9279,10 +10406,10 @@ function buildInserted(nodesLeft, source, start, end) {
 function moveText(tr, doc, before, after) {
   var root = (0, _tree.samePathDepth)(before, after);
   var cutAt = after.shorten(null, 1);
-  while (cutAt.path.length > root && doc.path(cutAt.path).length == 1) cutAt = cutAt.shorten(null, 1);
+  while (cutAt.path.length > root && doc.path(cutAt.path).size == 1) cutAt = cutAt.shorten(null, 1);
   tr.split(cutAt, cutAt.path.length - root);
   var start = after,
-      end = new _model.Pos(start.path, doc.path(start.path).maxOffset);
+      end = new _model.Pos(start.path, doc.path(start.path).size);
   var parent = doc.path(start.path.slice(0, root));
   var wanted = parent.pathNodes(before.path.slice(root));
   var existing = parent.pathNodes(start.path.slice(root));
@@ -9332,7 +10459,7 @@ _transform.Transform.prototype.replace = function (from, to, source, start, end)
     depth = _buildInserted.depth;
 
     while (depth > maxDepth) {
-      if (repl.nodes.length) repl = { nodes: [doc.path(from.path.slice(0, depth)).copy(repl.nodes)],
+      if (repl.content.size) repl = { content: _model.Fragment.from(doc.path(from.path.slice(0, depth)).copy(repl.content)),
         openLeft: repl.openLeft + 1, openRight: repl.openRight + 1 };
       depth--;
     }
@@ -9343,7 +10470,7 @@ _transform.Transform.prototype.replace = function (from, to, source, start, end)
   var root = from.shorten(depth),
       docAfter = doc,
       after = to;
-  if (repl.nodes.length || (0, _tree.replaceHasEffect)(doc, from, to)) {
+  if (repl.content.size || (0, _tree.replaceHasEffect)(doc, from, to)) {
     var result = this.step("replace", from, to, root, repl);
     docAfter = result.doc;
     after = result.map.map(to).pos;
@@ -9351,17 +10478,17 @@ _transform.Transform.prototype.replace = function (from, to, source, start, end)
 
   // If no text nodes before or after end of replacement, don't glue text
   if (!doc.path(to.path).isTextblock) return this;
-  if (!(repl.nodes.length ? source.path(end.path).isTextblock : doc.path(from.path).isTextblock)) return this;
+  if (!(repl.content.size ? source.path(end.path).isTextblock : doc.path(from.path).isTextblock)) return this;
 
   var nodesAfter = doc.path(root.path).pathNodes(to.path.slice(depth)).slice(1);
   var nodesBefore = undefined;
-  if (repl.nodes.length) {
-    var inserted = repl.nodes;
+  if (repl.content.size) {
+    var inserted = repl.content;
     nodesBefore = [];
     for (var i = 0; i < repl.openRight; i++) {
-      var last = inserted[inserted.length - 1];
+      var last = inserted.child(inserted.size - 1);
       nodesBefore.push(last);
-      inserted = last.children;
+      inserted = last.content;
     }
   } else {
     nodesBefore = doc.path(root.path).pathNodes(from.path.slice(depth)).slice(1);
@@ -9381,45 +10508,33 @@ _transform.Transform.prototype.replace = function (from, to, source, start, end)
       }
       path.push(offset - 1);
       node = node.child(offset - 1);
-      offset = node.maxOffset;
+      offset = node.size;
     }
     moveText(this, docAfter, before, after);
   }
   return this;
 };
 
-_transform.Transform.prototype.replaceWith = function (from, to, nodes) {
-  if (!Array.isArray(nodes)) nodes = [nodes];
+_transform.Transform.prototype.replaceWith = function (from, to, content) {
+  if (!(content instanceof _model.Fragment)) content = _model.Fragment.from(content);
   if (!_model.Pos.samePath(from.path, to.path)) return this;
-  this.step("replace", from, to, from, { nodes: nodes, openLeft: 0, openRight: 0 });
+  this.step("replace", from, to, from, { content: content, openLeft: 0, openRight: 0 });
   return this;
 };
 
-/**
- * Insert a node at a given position.
- *
- * @param  {Pos}   pos
- * @param  {mixed} nodes
- * @return {this}
- */
-_transform.Transform.prototype.insert = function (pos, nodes) {
-  return this.replaceWith(pos, pos, nodes);
+_transform.Transform.prototype.insert = function (pos, content) {
+  return this.replaceWith(pos, pos, content);
 };
 
-_transform.Transform.prototype.insertInline = function (pos, nodes) {
-  if (!Array.isArray(nodes)) nodes = [nodes];
-  var styles = (0, _model.spanStylesAt)(this.doc, pos);
-  nodes = nodes.map(function (n) {
-    return n.styled(styles);
-  });
-  return this.insert(pos, nodes);
+_transform.Transform.prototype.insertInline = function (pos, node) {
+  return this.insert(pos, node.mark(this.doc.marksAt(pos)));
 };
 
 _transform.Transform.prototype.insertText = function (pos, text) {
-  return this.insertInline(pos, this.doc.type.schema.text(text));
+  return this.insert(pos, this.doc.type.schema.text(text, this.doc.marksAt(pos)));
 };
 
-},{"../model":26,"./map":41,"./step":44,"./transform":46,"./tree":47}],43:[function(require,module,exports){
+},{"../model":27,"./map":41,"./step":45,"./transform":46,"./tree":47}],44:[function(require,module,exports){
 "use strict";
 
 var _model = require("../model");
@@ -9442,7 +10557,7 @@ var _map = require("./map");
 
     var parent = doc.path(parentPath);
     var target = parent.child(offset),
-        targetSize = target.maxOffset;
+        targetSize = target.size;
 
     var _ref = step.param || target;
 
@@ -9450,12 +10565,12 @@ var _map = require("./map");
     var attrsAfter = _ref.attrs;
 
     var splitAt = pos.offset;
-    if (splitAt == 0 && !target.type.canBeEmpty || target.type.locked || splitAt == target.maxOffset && !typeAfter.canBeEmpty) return null;
-    var newParent = parent.splice(offset, offset + 1, [target.copy(target.slice(0, splitAt)), typeAfter.create(attrsAfter, target.slice(splitAt))]);
+    if (splitAt == 0 && !target.type.canBeEmpty || target.type.locked || splitAt == target.size && !typeAfter.canBeEmpty) return null;
+    var newParent = parent.splice(offset, offset + 1, _model.Fragment.from([target.slice(0, splitAt), typeAfter.create(attrsAfter, target.content.slice(splitAt))]));
     var copy = doc.replaceDeep(parentPath, newParent);
 
     var dest = new _model.Pos(parentPath.concat(offset + 1), 0);
-    var map = new _map.PosMap([new _map.MovedRange(pos, targetSize - pos.offset, dest), new _map.MovedRange(new _model.Pos(parentPath, offset + 1), newParent.length - 2 - offset, new _model.Pos(parentPath, offset + 2))], [new _map.ReplacedRange(pos, pos, pos, dest, pos, pos.shorten(null, 1))]);
+    var map = new _map.PosMap([new _map.MovedRange(pos, targetSize - pos.offset, dest), new _map.MovedRange(new _model.Pos(parentPath, offset + 1), newParent.size - 2 - offset, new _model.Pos(parentPath, offset + 2))], [new _map.ReplacedRange(pos, pos, pos, dest, pos, pos.shorten(null, 1))]);
     return new _transform.TransformResult(copy, map);
   },
   invert: function invert(step, _oldDoc, map) {
@@ -9486,12 +10601,12 @@ _transform.Transform.prototype.splitIfNeeded = function (pos) {
 
   for (var off = 0; off < depth; off++) {
     var here = pos.shorten(pos.depth - off);
-    if (here.offset && here.offset < this.doc.path(here.path).maxOffset) this.step("split", null, null, here);
+    if (here.offset && here.offset < this.doc.path(here.path).size) this.step("split", null, null, here);
   }
   return this;
 };
 
-},{"../model":26,"./map":41,"./step":44,"./transform":46}],44:[function(require,module,exports){
+},{"../model":27,"./map":41,"./step":45,"./transform":46}],45:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -9561,163 +10676,7 @@ function defineStep(name, impl) {
   steps[name] = impl;
 }
 
-},{"../model":26}],45:[function(require,module,exports){
-"use strict";
-
-var _model = require("../model");
-
-var _transform = require("./transform");
-
-var _step = require("./step");
-
-var _tree = require("./tree");
-
-(0, _step.defineStep)("addStyle", {
-  apply: function apply(doc, step) {
-    return new _transform.TransformResult((0, _tree.copyStructure)(doc, step.from, step.to, function (node, from, to) {
-      if (!node.type.canContainStyle(step.param)) return node;
-      return (0, _tree.copyInline)(node, from, to, function (node) {
-        return node.styled(step.param.addToSet(node.styles));
-      });
-    }));
-  },
-  invert: function invert(step, _oldDoc, map) {
-    return new _step.Step("removeStyle", step.from, map.map(step.to).pos, null, step.param);
-  },
-  paramToJSON: function paramToJSON(param) {
-    return param.toJSON();
-  },
-  paramFromJSON: function paramFromJSON(schema, json) {
-    return schema.styleFromJSON(json);
-  }
-});
-
-_transform.Transform.prototype.addStyle = function (from, to, st) {
-  var _this = this;
-
-  var removed = [],
-      added = [],
-      removing = null,
-      adding = null;
-  this.doc.inlineNodesBetween(from, to, function (span, start, end, path, parent) {
-    if (st.isInSet(span.styles) || !parent.type.canContainStyle(st.type)) {
-      adding = removing = null;
-    } else {
-      path = path.slice();
-      var rm = (0, _model.containsStyle)(span.styles, st.type);
-      if (rm) {
-        if (removing && removing.param.eq(rm)) {
-          removing.to = new _model.Pos(path, end);
-        } else {
-          removing = new _step.Step("removeStyle", new _model.Pos(path, start), new _model.Pos(path, end), null, rm);
-          removed.push(removing);
-        }
-      } else if (removing) {
-        removing = null;
-      }
-      if (adding) {
-        adding.to = new _model.Pos(path, end);
-      } else {
-        adding = new _step.Step("addStyle", new _model.Pos(path, start), new _model.Pos(path, end), null, st);
-        added.push(adding);
-      }
-    }
-  });
-  removed.forEach(function (s) {
-    return _this.step(s);
-  });
-  added.forEach(function (s) {
-    return _this.step(s);
-  });
-  return this;
-};
-
-(0, _step.defineStep)("removeStyle", {
-  apply: function apply(doc, step) {
-    return new _transform.TransformResult((0, _tree.copyStructure)(doc, step.from, step.to, function (node, from, to) {
-      return (0, _tree.copyInline)(node, from, to, function (node) {
-        return node.styled(step.param.removeFromSet(node.styles));
-      });
-    }));
-  },
-  invert: function invert(step, _oldDoc, map) {
-    return new _step.Step("addStyle", step.from, map.map(step.to).pos, null, step.param);
-  },
-  paramToJSON: function paramToJSON(param) {
-    return param.toJSON();
-  },
-  paramFromJSON: function paramFromJSON(schema, json) {
-    return schema.styleFromJSON(json);
-  }
-});
-
-_transform.Transform.prototype.removeStyle = function (from, to) {
-  var _this2 = this;
-
-  var st = arguments.length <= 2 || arguments[2] === undefined ? null : arguments[2];
-
-  var matched = [],
-      step = 0;
-  this.doc.inlineNodesBetween(from, to, function (span, start, end, path) {
-    step++;
-    var toRemove = null;
-    if (st instanceof _model.StyleType) {
-      var found = (0, _model.containsStyle)(span.styles, st);
-      if (found) toRemove = [found];
-    } else if (st) {
-      if (st.isInSet(span.styles)) toRemove = [st];
-    } else {
-      toRemove = span.styles;
-    }
-    if (toRemove && toRemove.length) {
-      path = path.slice();
-      for (var i = 0; i < toRemove.length; i++) {
-        var rm = toRemove[i],
-            found = undefined;
-        for (var j = 0; j < matched.length; j++) {
-          var m = matched[j];
-          if (m.step == step - 1 && rm.eq(matched[j].style)) found = m;
-        }
-        if (found) {
-          found.to = new _model.Pos(path, end);
-          found.step = step;
-        } else {
-          matched.push({ style: rm, from: new _model.Pos(path, start), to: new _model.Pos(path, end), step: step });
-        }
-      }
-    }
-  });
-  matched.forEach(function (m) {
-    return _this2.step("removeStyle", m.from, m.to, null, m.style);
-  });
-  return this;
-};
-
-_transform.Transform.prototype.clearMarkup = function (from, to, newParent) {
-  var _this3 = this;
-
-  var delSteps = []; // Must be accumulated and applied in inverse order
-  this.doc.inlineNodesBetween(from, to, function (span, start, end, path) {
-    if (newParent ? !newParent.canContainType(span.type) : !span.isText) {
-      path = path.slice();
-      var _from = new _model.Pos(path, start);
-      delSteps.push(new _step.Step("replace", _from, new _model.Pos(path, end), _from));
-      return;
-    }
-    for (var i = 0; i < span.styles.length; i++) {
-      var st = span.styles[i];
-      if (!newParent || !newParent.canContainStyle(st.type)) {
-        path = path.slice();
-        _this3.step("removeStyle", new _model.Pos(path, start), new _model.Pos(path, end), null, st);
-      }
-    }
-  });
-  for (var i = delSteps.length - 1; i >= 0; i--) {
-    this.step(delSteps[i]);
-  }return this;
-};
-
-},{"../model":26,"./step":44,"./transform":46,"./tree":47}],46:[function(require,module,exports){
+},{"../model":27}],46:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -9792,7 +10751,7 @@ var Transform = (function () {
 
 exports.Transform = Transform;
 
-},{"./map":41,"./step":44}],47:[function(require,module,exports){
+},{"./map":41,"./step":45}],47:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -9804,39 +10763,29 @@ exports.isFlatRange = isFlatRange;
 exports.replaceHasEffect = replaceHasEffect;
 exports.samePathDepth = samePathDepth;
 
+var _model = require("../model");
+
 function copyStructure(node, from, to, f) {
   var depth = arguments.length <= 4 || arguments[4] === undefined ? 0 : arguments[4];
 
   if (node.isTextblock) {
-    return f(node, from, to);
+    return f(node, from ? from.offset : 0, to ? to.offset : node.size);
   } else {
-    if (!node.length) return node;
+    if (!node.size) return node;
     var start = from ? from.path[depth] : 0;
-    var end = to ? to.path[depth] : node.length - 1;
-    var content = node.slice(0, start);
-    if (start == end) {
-      content.push(copyStructure(node.child(start), from, to, f, depth + 1));
-    } else {
-      content.push(copyStructure(node.child(start), from, null, f, depth + 1));
-      for (var i = start + 1; i < end; i++) {
-        content.push(copyStructure(node.child(i), null, null, f, depth + 1));
-      }content.push(copyStructure(node.child(end), null, to, f, depth + 1));
+    var end = to ? to.path[depth] + 1 : node.size;
+    var content = node.content.toArray(0, start);
+    for (var iter = node.iter(start, end), child = undefined; child = iter.next().value;) {
+      var passFrom = iter.offset - child.width == start ? from : null;
+      var passTo = iter.offset == end ? to : null;
+      content.push(copyStructure(child, passFrom, passTo, f, depth + 1));
     }
-    for (var i = end + 1; i < node.length; i++) {
-      content.push(node.child(i));
-    }return node.copy(content);
+    return node.copy(_model.Fragment.fromArray(content.concat(node.content.toArray(end))));
   }
 }
 
 function copyInline(node, from, to, f) {
-  var start = from ? from.offset : 0;
-  var end = to ? to.offset : node.maxOffset;
-  var copied = node.slice(0, start).concat(node.slice(start, end).map(f)).concat(node.slice(end));
-  for (var i = copied.length - 2; i >= 0; i--) {
-    var merged = copied[i].maybeMerge(copied[i + 1]);
-    if (merged) copied.splice(i, 2, merged);
-  }
-  return node.copy(copied);
+  return node.splice(from, to, node.content.slice(from, to).map(f));
 }
 
 function isFlatRange(from, to) {
@@ -9847,7 +10796,7 @@ function isFlatRange(from, to) {
 }
 
 function canBeJoined(node, offset, depth) {
-  if (!depth || offset == 0 || offset == node.length) return false;
+  if (!depth || offset == 0 || offset == node.size) return false;
   var left = node.child(offset - 1),
       right = node.child(offset);
   return left.sameMarkup(right);
@@ -9866,9 +10815,9 @@ function replaceHasEffect(doc, from, to) {
         gapStart = from.path[depth] + 1;
         for (var i = depth + 1, n = node.child(gapStart - 1); i <= from.path.length; i++) {
           if (i == from.path.length) {
-            if (from.offset < n.maxOffset) return true;
+            if (from.offset < n.size) return true;
           } else {
-            if (from.path[i] + 1 < n.maxOffset) return true;
+            if (from.path[i] + 1 < n.size) return true;
             n = n.child(from.path[i]);
           }
         }
@@ -9895,7 +10844,7 @@ function samePathDepth(a, b) {
   }
 }
 
-},{}],48:[function(require,module,exports){
+},{"../model":27}],48:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
