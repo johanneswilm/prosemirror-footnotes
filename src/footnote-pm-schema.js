@@ -34,7 +34,7 @@ Footnote.register("command", {
   name: "insertFootnote",
   label: "Insert footnote",
   run(pm) {
-    return pm.tr.insertInline(pm.selection.head, this.create({fnContents:''})).apply()
+    return pm.tr.insert(pm.selection.head, this.create({fnContents:''})).apply()
   },
   menuGroup: 'inline',
   menuRank: 99

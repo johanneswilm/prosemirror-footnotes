@@ -25,37 +25,23 @@ var where = document.getElementById('editor'),
         }
         return footnotes;
     },
-    getNodePos = (currentNode, searchedNode, searchedNumber = 0, path = [], fromOffset = 0, toOffset = 0, counter = {
-        hits: 0
-    }) => {
-        var index = 0,
-            foundPos = false;
+    getNodePos = (rootNode, searchedNode, searchedNumber) => {
+        var hits = 0, foundNode;
 
-        if (currentNode === searchedNode) {
-            if (searchedNumber === counter.hits) {
-                return {
-                    from: new pm.Pos(path, fromOffset),
-                    to: new pm.Pos(path, toOffset)
+        rootNode.inlineNodesBetween(null, null, function(inlineNode, path, start, end, parent) {
+            if(inlineNode === searchedNode) {
+                if (searchedNumber === hits) {
+                    foundNode = {
+                        from: new pm.Pos(path, start),
+                        to: new pm.Pos(path, end)
+                    };
+                } else {
+                    hits++;
                 }
             }
-            counter.hits++;
-        }
-        currentNode.forEach(function(childNode, fromOffset, toOffset) {
-            var childPos;
-            if (childNode.isInline) {
-                childPos = getNodePos(childNode, searchedNode, searchedNumber, path, fromOffset, toOffset, counter);
-            } else {
-                childPos = getNodePos(childNode, searchedNode, searchedNumber, path.concat(index), fromOffset, toOffset, counter);
-            }
-            if (childPos !== false) {
-                foundPos = childPos;
-            }
-            index++;
-        })
-        if (foundPos !== false) {
-            return foundPos;
-        }
-        return false;
+        });
+
+        return foundNode;
     },
     sameArrayContents = (arrayOne, arrayTwo) => {
         if (arrayOne.length != arrayTwo.length) {

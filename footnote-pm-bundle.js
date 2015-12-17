@@ -56,7 +56,7 @@ Footnote.register("command", {
   name: "insertFootnote",
   label: "Insert footnote",
   run: function run(pm) {
-    return pm.tr.insertInline(pm.selection.head, this.create({ fnContents: '' })).apply();
+    return pm.tr.insert(pm.selection.head, this.create({ fnContents: '' })).apply();
   },
   menuGroup: 'inline',
   menuRank: 99
@@ -142,43 +142,24 @@ var where = document.getElementById('editor'),
     }
     return footnotes;
 },
-    getNodePos = function getNodePos(currentNode, searchedNode) {
-    var searchedNumber = arguments.length <= 2 || arguments[2] === undefined ? 0 : arguments[2];
-    var path = arguments.length <= 3 || arguments[3] === undefined ? [] : arguments[3];
-    var fromOffset = arguments.length <= 4 || arguments[4] === undefined ? 0 : arguments[4];
-    var toOffset = arguments.length <= 5 || arguments[5] === undefined ? 0 : arguments[5];
-    var counter = arguments.length <= 6 || arguments[6] === undefined ? {
-        hits: 0
-    } : arguments[6];
+    getNodePos = function getNodePos(rootNode, searchedNode, searchedNumber) {
+    var hits = 0,
+        foundNode;
 
-    var index = 0,
-        foundPos = false;
-
-    if (currentNode === searchedNode) {
-        if (searchedNumber === counter.hits) {
-            return {
-                from: new pm.Pos(path, fromOffset),
-                to: new pm.Pos(path, toOffset)
-            };
+    rootNode.inlineNodesBetween(null, null, function (inlineNode, path, start, end, parent) {
+        if (inlineNode === searchedNode) {
+            if (searchedNumber === hits) {
+                foundNode = {
+                    from: new pm.Pos(path, start),
+                    to: new pm.Pos(path, end)
+                };
+            } else {
+                hits++;
+            }
         }
-        counter.hits++;
-    }
-    currentNode.forEach(function (childNode, fromOffset, toOffset) {
-        var childPos;
-        if (childNode.isInline) {
-            childPos = getNodePos(childNode, searchedNode, searchedNumber, path, fromOffset, toOffset, counter);
-        } else {
-            childPos = getNodePos(childNode, searchedNode, searchedNumber, path.concat(index), fromOffset, toOffset, counter);
-        }
-        if (childPos !== false) {
-            foundPos = childPos;
-        }
-        index++;
     });
-    if (foundPos !== false) {
-        return foundPos;
-    }
-    return false;
+
+    return foundNode;
 },
     sameArrayContents = function sameArrayContents(arrayOne, arrayTwo) {
     if (arrayOne.length != arrayTwo.length) {
