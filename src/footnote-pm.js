@@ -13,21 +13,20 @@ var where = document.getElementById('editor'),
     doc = pm.fromDOM(pm.fidusSchema, where),
     editor, fnEditor,
     lastFootnotes = [],
-    findFootnotes = node => {
+    findFootnotes = rootNode => {
         var footnotes = [];
-        if (node.type.name === 'footnote') {
-            footnotes.push(node);
-        }
-        if (node.content && node.content.content) {
-            node.content.content.forEach(function(node) {
-                footnotes = footnotes.concat(findFootnotes(node));
-            })
-        }
+
+        rootNode.inlineNodesBetween(null, null, function(inlineNode, path, start, end, parent) {
+            if (inlineNode.type.name === 'footnote') {
+                footnotes.push(inlineNode);
+            }
+        });
+
         return footnotes;
     },
     getNodePos = (rootNode, searchedNode, searchedNumber) => {
         var hits = 0, foundNode;
-
+        
         rootNode.inlineNodesBetween(null, null, function(inlineNode, path, start, end, parent) {
             if(inlineNode === searchedNode) {
                 if (searchedNumber === hits) {
