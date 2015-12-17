@@ -14,12 +14,12 @@ Footnote.attributes = {fnContents: new Attribute("fnContents")}
 Footnote.register("parseDOM", {
   tag: "span",
   rank: 25,
-  parse: (dom, context, type, attrs) => {
+  parse: function(dom, state) {
     let isFootnote = dom.classList.contains('footnote')
     if (!isFootnote) return false
-    context.insertFrom(dom, type, {
+    state.insertFrom(dom, this, {
         fnContents: dom.getAttribute('footnote-contents'),
-    })
+    }, null)
   }
 })
 
@@ -30,14 +30,15 @@ Footnote.prototype.serializeDOM = node => {
   return dom
 }
 
-Footnote.attachCommand("insertFootnote", nodeType => ({
+Footnote.register("command", {
+  name: "insertFootnote",
   label: "Insert footnote",
   run(pm) {
-    return pm.tr.insertInline(pm.selection.head, nodeType.create({fnContents:''})).apply()
+    return pm.tr.insertInline(pm.selection.head, this.create({fnContents:''})).apply()
   },
   menuGroup: 'inline',
   menuRank: 99
-}))
+})
 
 class FootnoteContainer extends Block {
   get locked() { return true }
@@ -47,12 +48,12 @@ class FootnoteContainer extends Block {
 FootnoteContainer.register("parseDOM", {
   tag: "div",
   rank: 25,
-  parse: (dom, context, type, attrs) => {
+  parse: function (dom, state) {
     let isFootnoteContainer = dom.classList.contains('footnote-container')
     if (!isFootnoteContainer) return false
-    context.enterFrom(dom, type, attrs)
-    context.addAll(dom.firstChild, null, true)
-    context.leave()
+    state.enterFrom(dom, this, null)
+    state.addAll(dom.firstChild, null, true)
+    state.leave()
   }
 })
 
