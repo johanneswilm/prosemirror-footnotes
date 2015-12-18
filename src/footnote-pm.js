@@ -115,9 +115,5 @@ editor.on('transform', function(transform, object) {
     }
 });
 fnEditor.on('transform', function(transform, object) {
-    if (transform.steps.some(function(step) {
-      return step.type==="replace";
-    })) {
-      updateFootnotes();
-    }
+    updateFootnotes();
 });

@@ -233,11 +233,7 @@ editor.on('transform', function (transform, object) {
     }
 });
 fnEditor.on('transform', function (transform, object) {
-    if (transform.steps.some(function (step) {
-        return step.type === "replace";
-    })) {
-        updateFootnotes();
-    }
+    updateFootnotes();
 });
 
 },{"../../prosemirror/src/edit/main":14,"../../prosemirror/src/menu/menubar":20,"../../prosemirror/src/model":26,"../../prosemirror/src/parse/dom":31,"./footnote-pm-schema":1}],3:[function(require,module,exports){
