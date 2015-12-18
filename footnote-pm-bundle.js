@@ -144,7 +144,7 @@ var where = document.getElementById('editor'),
     getNodePos = function getNodePos(rootNode, searchedNode, searchedNumber) {
     var hits = 0,
         foundNode;
-    console.log(searchedNumber);
+
     rootNode.inlineNodesBetween(null, null, function (inlineNode, path, start, end, parent) {
         if (inlineNode === searchedNode) {
             if (searchedNumber === hits) {
@@ -225,11 +225,19 @@ editor = makeEditor(where, pm.fidusSchema);
 fnEditor = makeEditor(document.getElementById('footnote-editor'), pm.fidusFnSchema);
 editor.setContent(doc);
 renderFootnotes();
-editor.on('change', function () {
-    renderFootnotes();
+editor.on('transform', function (transform, object) {
+    if (transform.steps.some(function (step) {
+        return step.type === "replace";
+    })) {
+        renderFootnotes();
+    }
 });
-fnEditor.on('change', function () {
-    updateFootnotes();
+fnEditor.on('transform', function (transform, object) {
+    if (transform.steps.some(function (step) {
+        return step.type === "replace";
+    })) {
+        updateFootnotes();
+    }
 });
 
 },{"../../prosemirror/src/edit/main":14,"../../prosemirror/src/menu/menubar":20,"../../prosemirror/src/model":26,"../../prosemirror/src/parse/dom":31,"./footnote-pm-schema":1}],3:[function(require,module,exports){
