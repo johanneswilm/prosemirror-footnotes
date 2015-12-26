@@ -1,16 +1,68 @@
-window.pm = {
-    ProseMirror: require("../../prosemirror/src/edit/main").ProseMirror,
-    Pos: require("../../prosemirror/src/model").Pos,
-    Node: require("../../prosemirror/src/model").Node,
-    fromDOM: require("../../prosemirror/src/parse/dom").fromDOM,
-    fromHTML: require("../../prosemirror/src/parse/dom").fromHTML,
-    fidusSchema: require("./footnote-pm-schema").fidusSchema,
-    fidusFnSchema: require("./footnote-pm-schema").fidusFnSchema,
-    MenuBar: require("../../prosemirror/src/menu/menubar").MenuBar
-};
+class Footnote extends pm.Inline {
+}
+
+Footnote.attributes = {fnContents: new pm.Attribute("fnContents")}
+
+Footnote.register("parseDOM", {
+  tag: "span",
+  rank: 25,
+  parse: function(dom, state) {
+    let isFootnote = dom.classList.contains('footnote')
+    if (!isFootnote) return false
+    state.insertFrom(dom, this, {
+        fnContents: dom.getAttribute('footnote-contents'),
+    }, null)
+  }
+})
+
+Footnote.prototype.serializeDOM = node => {
+  let dom = pm.elt("span", {class: 'footnote'})
+  dom.setAttribute('footnote-contents', node.attrs.fnContents)
+  dom.setAttribute('contenteditable', false)
+  return dom
+}
+
+Footnote.register("command", {
+  name: "insertFootnote",
+  label: "Insert footnote",
+  run(pm) {
+    return pm.tr.insert(pm.selection.head, this.create({fnContents:''})).apply()
+  },
+  menuGroup: 'inline',
+  menuRank: 99
+})
+
+var fidusSchema = new pm.Schema(pm.defaultSchema.spec.update({footnote: Footnote}));
+
+class FootnoteContainer extends pm.Block {
+  get locked() { return true; }
+  get selectable() { return false; }
+}
+
+FootnoteContainer.register("parseDOM", {
+  tag: "div",
+  rank: 25,
+  parse: function (dom, state) {
+    let isFootnoteContainer = dom.classList.contains('footnote-container');
+    if (!isFootnoteContainer) return false;
+    state.enterFrom(dom, this, null);
+    state.addAll(dom.firstChild, null, true);
+    state.leave();
+  }
+})
+
+FootnoteContainer.prototype.serializeDOM = (node, serializer, third, fourth) => {
+  let dom = serializer.elt("div", {
+    class: 'footnote-container'
+  })
+  serializer.renderContent(node, dom);
+  return dom;
+}
+
+var fidusFnSchema = new pm.Schema(pm.defaultSchema.spec.update({footnotecontainer: FootnoteContainer}));
 
 var where = document.getElementById('editor'),
-    doc = pm.fromDOM(pm.fidusSchema, where),
+    doc = pm.fromDOM(fidusSchema, where),
     editor, fnEditor,
     lastFootnotes = [],
     findFootnotes = rootNode => {
@@ -61,7 +113,7 @@ var where = document.getElementById('editor'),
         currentFootnotes.forEach(footnote => {
             footnotesHTML += "<div class='footnote-container'>" + footnote.attrs.fnContents + "</div>"
         })
-        fnEditor.setContent(pm.fromHTML(pm.fidusFnSchema, footnotesHTML));
+        fnEditor.setContent(pm.fromHTML(fidusFnSchema, footnotesHTML));
 
         lastFootnotes = currentFootnotes;
     },
@@ -104,8 +156,8 @@ var where = document.getElementById('editor'),
     };
 
 where.innerHTML = '';
-editor = makeEditor(where, pm.fidusSchema);
-fnEditor = makeEditor(document.getElementById('footnote-editor'), pm.fidusFnSchema);
+editor = makeEditor(where, fidusSchema);
+fnEditor = makeEditor(document.getElementById('footnote-editor'), fidusFnSchema);
 editor.setContent(doc);
 renderFootnotes();
 editor.on('transform', function(transform, object) {
