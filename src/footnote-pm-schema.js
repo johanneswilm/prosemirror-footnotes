@@ -65,5 +65,5 @@ FootnoteContainer.prototype.serializeDOM = (node, serializer, third, fourth) => 
   return dom
 }
 
-export const fidusSchema = new Schema(defaultSchema.spec.updateNodes({footnote: Footnote}))
-export const fidusFnSchema = new Schema(defaultSchema.spec.updateNodes({footnotecontainer: FootnoteContainer}))
+export const fidusSchema = new Schema(defaultSchema.spec.update({footnote: Footnote}))
+export const fidusFnSchema = new Schema(defaultSchema.spec.update({footnotecontainer: FootnoteContainer}))

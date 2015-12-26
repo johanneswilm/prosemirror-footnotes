@@ -106,9 +106,9 @@ FootnoteContainer.prototype.serializeDOM = function (node, serializer, third, fo
   return dom;
 };
 
-var fidusSchema = new _prosemirrorSrcModel.Schema(_prosemirrorSrcModel.defaultSchema.spec.updateNodes({ footnote: Footnote }));
+var fidusSchema = new _prosemirrorSrcModel.Schema(_prosemirrorSrcModel.defaultSchema.spec.update({ footnote: Footnote }));
 exports.fidusSchema = fidusSchema;
-var fidusFnSchema = new _prosemirrorSrcModel.Schema(_prosemirrorSrcModel.defaultSchema.spec.updateNodes({ footnotecontainer: FootnoteContainer }));
+var fidusFnSchema = new _prosemirrorSrcModel.Schema(_prosemirrorSrcModel.defaultSchema.spec.update({ footnotecontainer: FootnoteContainer }));
 exports.fidusFnSchema = fidusFnSchema;
 
 },{"../../prosemirror/src/dom":3,"../../prosemirror/src/model":26,"../../prosemirror/src/serialize/dom":34}],2:[function(require,module,exports){
@@ -142,6 +142,7 @@ var where = document.getElementById('editor'),
     return footnotes;
 },
     getNodePos = function getNodePos(rootNode, searchedNode, searchedNumber) {
+    console.log(searchedNumber);
     var hits = 0,
         foundNode;
 
@@ -439,7 +440,6 @@ var _slicedToArray = (function () { function sliceIterator(arr, i) { var _arr = 
 
 var _createClass = (function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
 
-exports.defineCommand = defineCommand;
 exports.defineParamHandler = defineParamHandler;
 exports.initCommands = initCommands;
 exports.defaultKeymap = defaultKeymap;
@@ -466,19 +466,25 @@ var _keys = require("./keys");
 
 var _selection = require("./selection");
 
-var globalCommands = Object.create(null);
+var _options = require("./options");
+
 var paramHandlers = Object.create(null);
 
 var empty = [];
 
+// FIXME document individual commands
+
 // ;; A command is a named piece of functionality that can be bound to
-// a key, shown in the menu, or otherwise exposed to the user. There
-// are two sources of commands: Global commands, registered with
-// `defineCommand`, are available everywhere. Commands associated with
-// [node](#NodeType) or [mark](#MarkType) types, registered by using
-// the types' [`register`](#NodeType.register) method with the string
-// `"command"`, are available only in editors whose schema contains
-// that node or mark type.
+// a key, shown in the menu, or otherwise exposed to the user.
+//
+// The commands available in a given editor are gathered from the
+// [registries](#Registry) given to the editor, and the node and
+// mark types in its [schema](#Schema.registry). Use the
+// [`register`](#NodeType.register) method with `"command"` as the
+// name and a `CommandSpec` as value to define a new command.
+//
+// This module defines a [bunch of commands](#edit_commands) in the
+// [default registry](#defaultRegistry).
 
 var Command = (function () {
   function Command(spec, self) {
@@ -537,6 +543,8 @@ var Command = (function () {
   // :: union<string, [string]> #path=CommandSpec.macKey
   // Default key binding or bindings specific to the Mac platform.
 
+  // FIXME document menu and icon properties
+
   // ;; #path=CommandParam #kind=interface #toc=false
   // The parameters that a command can take are specified using objects
   // with the following properties:
@@ -551,8 +559,11 @@ var Command = (function () {
   // :: any #path=CommandParam.default
   // A default value for the parameter.
 
-  // :: (CommandSpec)
-  // Define a global (not node- or mark-specific) command.
+  // :: (string, (pm: ProseMirror, cmd: Command, callback: (?[any])))
+  // Register a parameter handler, which is a function that prompts the
+  // user to enter values for a command's [parameters](#CommandParam), and
+  // calls a callback with the values received. See also the
+  // [`commandParamHandler` option](#commandParamHandler).
 
   // :: (ProseMirror, ?[any]) → ?bool
   // Execute this command. If the command takes
@@ -624,16 +635,6 @@ var Command = (function () {
 
 exports.Command = Command;
 
-function defineCommand(spec) {
-  globalCommands[spec.name] = new Command(spec);
-}
-
-// :: (string, (pm: ProseMirror, cmd: Command, callback: (?[any])))
-// Register a parameter handler, which is a function that prompts the
-// user to enter values for a command's [parameters](#CommandParam), and
-// calls a callback with the values received. See also the
-// [`commandParamHandler` option](#commandParamHandler).
-
 function defineParamHandler(name, handler) {
   paramHandlers[name] = handler;
 }
@@ -643,25 +644,11 @@ function getParamHandler(pm) {
   if (option && paramHandlers[option]) return paramHandlers[option];
 }
 
-function initCommands(schema) {
+function initCommands(pm) {
   var result = Object.create(null);
-  for (var cmd in globalCommands) {
-    result[cmd] = globalCommands[cmd];
-  }function fromTypes(types) {
-    var _loop = function (_name) {
-      var type = types[_name],
-          cmds = type.command;
-      if (cmds) cmds.forEach(function (spec) {
-        result[spec.name] = new Command(spec, type);
-      });
-    };
-
-    for (var _name in types) {
-      _loop(_name);
-    }
-  }
-  fromTypes(schema.nodes);
-  fromTypes(schema.marks);
+  pm.registry("command", function (spec, type) {
+    result[spec.name] = new Command(spec, type);
+  });
   return result;
 }
 
@@ -678,19 +665,19 @@ function defaultKeymap(pm) {
       var _d$$exec2 = _slicedToArray(_d$$exec, 3);
 
       var _ = _d$$exec2[0];
-      var _name2 = _d$$exec2[1];
+      var _name = _d$$exec2[1];
       var _d$$exec2$2 = _d$$exec2[2];
       var rank = _d$$exec2$2 === undefined ? 50 : _d$$exec2$2;
 
-      (0, _utilSortedinsert2["default"])(bindings[_name2] || (bindings[_name2] = []), { command: command, rank: rank }, function (a, b) {
+      (0, _utilSortedinsert2["default"])(bindings[_name] || (bindings[_name] = []), { command: command, rank: rank }, function (a, b) {
         return a.rank - b.rank;
       });
     }
   }
-  for (var _name3 in pm.commands) {
-    var cmd = pm.commands[_name3];
-    add(_name3, cmd.spec.key);
-    add(_name3, _dom.browser.mac ? cmd.spec.macKey : cmd.spec.pcKey);
+  for (var _name2 in pm.commands) {
+    var cmd = pm.commands[_name2];
+    add(_name2, cmd.spec.key);
+    add(_name2, _dom.browser.mac ? cmd.spec.macKey : cmd.spec.pcKey);
   }
 
   for (var key in bindings) {
@@ -702,29 +689,16 @@ function defaultKeymap(pm) {
 
 var andScroll = { scrollIntoView: true };
 
-_model.HardBreak.register("command", {
-  name: "insertHardBreak",
-  label: "Insert hard break",
-  run: function run(pm) {
-    var _pm$selection = pm.selection;
-    var node = _pm$selection.node;
-    var from = _pm$selection.from;
-
-    if (node && node.isBlock) return false;else if (pm.doc.path(from.path).type.isCode) return pm.tr.typeText("\n").apply(andScroll);else return pm.tr.replaceSelection(this.create()).apply(andScroll);
-  },
-  key: ["Mod-Enter", "Shift-Enter"]
-});
-
 function markActive(pm, type) {
   var sel = pm.selection;
   if (sel.empty) return type.isInSet(pm.activeMarks());else return pm.doc.rangeHasMark(sel.from, sel.to, type);
 }
 
 function canAddInline(pm, type) {
-  var _pm$selection2 = pm.selection;
-  var from = _pm$selection2.from;
-  var to = _pm$selection2.to;
-  var empty = _pm$selection2.empty;
+  var _pm$selection = pm.selection;
+  var from = _pm$selection.from;
+  var to = _pm$selection.to;
+  var empty = _pm$selection.empty;
 
   if (empty) return !type.isInSet(pm.activeMarks()) && pm.doc.path(from.path).type.canContainMark(type);
   var can = false;
@@ -736,9 +710,9 @@ function canAddInline(pm, type) {
 }
 
 function markApplies(pm, type) {
-  var _pm$selection3 = pm.selection;
-  var from = _pm$selection3.from;
-  var to = _pm$selection3.to;
+  var _pm$selection2 = pm.selection;
+  var from = _pm$selection2.from;
+  var to = _pm$selection2.to;
 
   var relevant = false;
   pm.doc.nodesBetween(from, to, function (node) {
@@ -793,6 +767,23 @@ function generateMarkCommands(type, name, labelName, spec) {
   }type.register("command", command);
 }
 
+// :: StrongMark #path=setStrong #kind=command
+// Add the [strong](#StrongMark) mark to the selected content.
+
+// :: StrongMark #path=unsetStrong #kind=command
+// Remove the [strong](#StrongMark) mark from the selected content.
+
+// :: StrongMark #path=strong #kind=command// Toggle the [strong](#StrongMark) mark. If there is any strong
+// content in the selection, or there is no selection and the [active
+// marks](#ProseMirror.activeMarks) contain the strong mark, this
+// counts as [active](#Command.active) and executing it removes the
+// mark. Otherwise, this does not count as active, and executing it
+// makes the selected content strong.
+//
+// **Keybindings:** Mod-B
+//
+// Registers itself in the inline [menu](#FIXME).
+
 generateMarkCommands(_model.StrongMark, "strong", null, {
   menuGroup: "inline", menuRank: 20,
   icon: {
@@ -801,6 +792,24 @@ generateMarkCommands(_model.StrongMark, "strong", null, {
   },
   key: "Mod-B"
 });
+
+// :: EmMark #path=setEm #kind=command
+// Add the [emphasis](#EmMark) mark to the selected content.
+
+// :: EmMark #path=unsetEm #kind=command
+// Remove the [emphasis](#EmMark) mark from the selected content.
+
+// :: EmMark #path=em #kind=command
+// Toggle the [emphasis](#EmMark) mark. If there is any emphasized
+// content in the selection, or there is no selection and the [active
+// marks](#ProseMirror.activeMarks) contain the emphasis mark, this
+// counts as [active](#Command.active) and executing it removes the
+// mark. Otherwise, this does not count as active, and executing it
+// makes the selected content emphasized.
+//
+// **Keybindings:** Mod-I
+//
+// Registers itself in the inline [menu](#FIXME).
 
 generateMarkCommands(_model.EmMark, "em", "emphasis", {
   menuGroup: "inline", menuRank: 21,
@@ -811,6 +820,24 @@ generateMarkCommands(_model.EmMark, "em", "emphasis", {
   key: "Mod-I"
 });
 
+// :: CodeMark #path=setCode #kind=command
+// Add the [code](#CodeMark) mark to the selected content.
+
+// :: CodeMark #path=unsetCode #kind=command
+// Remove the [code](#CodeMark) mark from the selected content.
+
+// :: CodeMark #path=code #kind=command
+// Toggle the [code](#CodeMark) mark. If there is any code-styled
+// content in the selection, or there is no selection and the [active
+// marks](#ProseMirror.activeMarks) contain the code mark, this
+// counts as [active](#Command.active) and executing it removes the
+// mark. Otherwise, this does not count as active, and executing it
+// styles the selected content as code.
+//
+// **Keybindings:** Mod-`
+//
+// Registers itself in the inline [menu](#FIXME).
+
 generateMarkCommands(_model.CodeMark, "code", null, {
   menuGroup: "inline", menuRank: 22,
   icon: {
@@ -819,6 +846,14 @@ generateMarkCommands(_model.CodeMark, "code", null, {
   },
   key: "Mod-`"
 });
+
+// :: LinkMark #path=unlink #kind=command
+// Removes all links for the selected content, or, if there is no
+// selection, from the [active marks](#ProseMirror.activeMarks). Will
+// only [select](#Command.select) itself when there is a link in the
+// selection or active marks.
+//
+// Registers itself in the inline [menu](#FIXME).
 
 _model.LinkMark.register("command", {
   name: "unlink",
@@ -836,6 +871,21 @@ _model.LinkMark.register("command", {
   icon: { from: "link" }
 });
 
+// :: LinkMark #path=link #kind=command
+// Adds a link mark to the selection or set of [active
+// marks](#ProseMirror.activeMarks). Takes parameters to determine the
+// attributes of the link:
+//
+// **`href`**`: string`
+//   : The link's target.
+//
+// **`title`**`: string`
+//   : The link's title.
+//
+// Adds itself to the inline [menu](#FIXME). Only selects itself when
+// `unlink` isn't selected, so that only one of the two is visible in
+// the menu at any time.
+
 _model.LinkMark.register("command", {
   name: "link",
   label: "Add link",
@@ -851,7 +901,24 @@ _model.LinkMark.register("command", {
     width: 951, height: 1024,
     path: "M832 694q0-22-16-38l-118-118q-16-16-38-16-24 0-41 18 1 1 10 10t12 12 8 10 7 14 2 15q0 22-16 38t-38 16q-8 0-15-2t-14-7-10-8-12-12-10-10q-18 17-18 41 0 22 16 38l117 118q15 15 38 15 22 0 38-14l84-83q16-16 16-38zM430 292q0-22-16-38l-117-118q-16-16-38-16-22 0-38 15l-84 83q-16 16-16 38 0 22 16 38l118 118q15 15 38 15 24 0 41-17-1-1-10-10t-12-12-8-10-7-14-2-15q0-22 16-38t38-16q8 0 15 2t14 7 10 8 12 12 10 10q18-17 18-41zM941 694q0 68-48 116l-84 83q-47 47-116 47-69 0-116-48l-117-118q-47-47-47-116 0-70 50-119l-50-50q-49 50-118 50-68 0-116-48l-118-118q-48-48-48-116t48-116l84-83q47-47 116-47 69 0 116 48l117 118q47 47 47 116 0 70-50 119l50 50q49-50 118-50 68 0 116 48l118 118q48 48 48 116z"
   }
+  // FIXME pre-fill params when a single link is selected
+  // (If parameter pre-filling is going to continue working like that)
 });
+
+// :: Image #path=insertImage #kind=command
+// Replace the selection with an [image](#Image) node. Takes paramers
+// that specify the image's attributes:
+//
+// **`src`**`: string`
+//   : The URL of the image.
+//
+// **`alt`**`: string`
+//   : The alt text for the image.
+//
+// **`title`**`: string`
+//   : A title for the image.
+//
+// Registers itself in the inline [menu](#FIXME).
 
 _model.Image.register("command", {
   name: "insertImage",
@@ -872,16 +939,11 @@ _model.Image.register("command", {
     var node = pm.selection.node;
 
     if (node && node.type == this) return [node.attrs.src, node.attrs.alt, node.attrs.title];
+    // FIXME else use the selected text as alt
   }
 });
 
-/**
- * Get an offset moving backward from a current offset inside a node.
- *
- * @param  {Object} parent The parent node.
- * @param  {int}    offset Offset to move from inside the node.
- * @param  {string} by     Size to delete by. Either "char" or "word".
- */
+// Get an offset moving backward from a current offset inside a node.
 function moveBackward(parent, offset, by) {
   if (by != "char" && by != "word") throw new Error("Unknown motion unit: " + by);
 
@@ -916,7 +978,14 @@ function moveBackward(parent, offset, by) {
   }
 }
 
-defineCommand({
+// ;; #path=deleteSelection #kind=command
+// Delete the selection, if there is one.
+//
+// **Keybindings:** Backspace, Delete, Mod-Backspace, Mod-Delete,
+// **Ctrl-H (Mac), Alt-Backspace (Mac), Ctrl-D (Mac),
+// **Ctrl-Alt-Backspace (Mac), Alt-Delete (Mac), Alt-D (Mac)
+
+_options.defaultRegistry.register("command", {
   name: "deleteSelection",
   label: "Delete the selection",
   run: function run(pm) {
@@ -949,13 +1018,22 @@ function deleteBarrier(pm, cut) {
   return pm.tr.lift(selAfter.from, selAfter.to).apply(andScroll);
 }
 
-defineCommand({
+// ;; #path=joinBackward #kind=command
+// If the selection is empty and at the start of a textblock, move
+// that block closer to the block before it, by lifting it out of its
+// parent or, if it has no parent it doesn't share with the node
+// before it, moving it into a parent of that node, or joining it with
+// that.
+//
+// **Keybindings:** Backspace, Mod-Backspace
+
+_options.defaultRegistry.register("command", {
   name: "joinBackward",
   label: "Join with the block above",
   run: function run(pm) {
-    var _pm$selection4 = pm.selection;
-    var head = _pm$selection4.head;
-    var empty = _pm$selection4.empty;
+    var _pm$selection3 = pm.selection;
+    var head = _pm$selection3.head;
+    var empty = _pm$selection3.empty;
 
     if (!empty || head.offset > 0) return false;
 
@@ -979,13 +1057,19 @@ defineCommand({
   key: ["Backspace(30)", "Mod-Backspace(30)"]
 });
 
-defineCommand({
+// ;; #path=deleteCharBefore #kind=command
+// Delete the character before the cursor, if the selection is empty
+// and the cursor isn't at the start of a textblock.
+//
+// **Keybindings:** Backspace, Ctrl-H (Mac)
+
+_options.defaultRegistry.register("command", {
   name: "deleteCharBefore",
   label: "Delete a character before the cursor",
   run: function run(pm) {
-    var _pm$selection5 = pm.selection;
-    var head = _pm$selection5.head;
-    var empty = _pm$selection5.empty;
+    var _pm$selection4 = pm.selection;
+    var head = _pm$selection4.head;
+    var empty = _pm$selection4.empty;
 
     if (!empty || head.offset == 0) return false;
     var from = moveBackward(pm.doc.path(head.path), head.offset, "char");
@@ -995,13 +1079,19 @@ defineCommand({
   macKey: "Ctrl-H(40)"
 });
 
-defineCommand({
+// ;; #path=deleteWordBefore #kind=command
+// Delete the word before the cursor, if the selection is empty and
+// the cursor isn't at the start of a textblock.
+//
+// **Keybindings:** Mod-Backspace, Alt-Backspace (Mac)
+
+_options.defaultRegistry.register("command", {
   name: "deleteWordBefore",
   label: "Delete the word before the cursor",
   run: function run(pm) {
-    var _pm$selection6 = pm.selection;
-    var head = _pm$selection6.head;
-    var empty = _pm$selection6.empty;
+    var _pm$selection5 = pm.selection;
+    var head = _pm$selection5.head;
+    var empty = _pm$selection5.empty;
 
     if (!empty || head.offset == 0) return false;
     var from = moveBackward(pm.doc.path(head.path), head.offset, "word");
@@ -1042,13 +1132,22 @@ function moveForward(parent, offset, by) {
   }
 }
 
-defineCommand({
+// ;; #path=joinForward #kind=command
+// If the selection is empty and the cursor is at the end of a
+// textblock, move the node after it closer to the node with the
+// cursor (lifting it out of parents that aren't shared, moving it
+// into parents of the cursor block, or joining the two when they are
+// siblings).
+//
+// **Keybindings:** Delete, Mod-Delete
+
+_options.defaultRegistry.register("command", {
   name: "joinForward",
   label: "Join with the block below",
   run: function run(pm) {
-    var _pm$selection7 = pm.selection;
-    var head = _pm$selection7.head;
-    var empty = _pm$selection7.empty;
+    var _pm$selection6 = pm.selection;
+    var head = _pm$selection6.head;
+    var empty = _pm$selection6.empty;
 
     if (!empty || head.offset < pm.doc.path(head.path).size) return false;
 
@@ -1073,13 +1172,19 @@ defineCommand({
   key: ["Delete(30)", "Mod-Delete(30)"]
 });
 
-defineCommand({
+// ;; #path=deleteCharAfter #kind=command
+// Delete the character after the cursor, if the selection is empty
+// and the cursor isn't at the end of its textblock.
+//
+// **Keybindings:** Delete, Ctrl-D (Mac)
+
+_options.defaultRegistry.register("command", {
   name: "deleteCharAfter",
   label: "Delete a character after the cursor",
   run: function run(pm) {
-    var _pm$selection8 = pm.selection;
-    var head = _pm$selection8.head;
-    var empty = _pm$selection8.empty;
+    var _pm$selection7 = pm.selection;
+    var head = _pm$selection7.head;
+    var empty = _pm$selection7.empty;
 
     if (!empty || head.offset == pm.doc.path(head.path).size) return false;
     var to = moveForward(pm.doc.path(head.path), head.offset, "char");
@@ -1089,13 +1194,20 @@ defineCommand({
   macKey: "Ctrl-D(60)"
 });
 
-defineCommand({
+// ;; #path=deleteWordAfter #kind=command
+// Delete the word after the cursor, if the selection is empty and the
+// cursor isn't at the end of a textblock.
+//
+// **Keybindings:** Mod-Delete, Ctrl-Alt-Backspace (Mac), Alt-Delete
+// (Mac), Alt-D (Mac)
+
+_options.defaultRegistry.register("command", {
   name: "deleteWordAfter",
-  label: "Delete a character after the cursor",
+  label: "Delete a word after the cursor",
   run: function run(pm) {
-    var _pm$selection9 = pm.selection;
-    var head = _pm$selection9.head;
-    var empty = _pm$selection9.empty;
+    var _pm$selection8 = pm.selection;
+    var head = _pm$selection8.head;
+    var empty = _pm$selection8.empty;
 
     if (!empty || head.offset == pm.doc.path(head.path).size) return false;
     var to = moveForward(pm.doc.path(head.path), head.offset, "word");
@@ -1106,22 +1218,30 @@ defineCommand({
 });
 
 function joinPointAbove(pm) {
-  var _pm$selection10 = pm.selection;
-  var node = _pm$selection10.node;
-  var from = _pm$selection10.from;
+  var _pm$selection9 = pm.selection;
+  var node = _pm$selection9.node;
+  var from = _pm$selection9.from;
 
   if (node) return (0, _transform.joinableBlocks)(pm.doc, from) ? from : null;else return (0, _transform.joinPoint)(pm.doc, from, -1);
 }
 
-defineCommand({
+// ;; #path=joinUp #kind=command
+// Join the selected block or, if there is a text selection, the
+// closest ancestor block of the selection that can be joined, with
+// the sibling above it.
+//
+// **Keybindings:** Alt-Up
+//
+// Registers itself in the block [menu](#FIXME)
+
+_options.defaultRegistry.register("command", {
   name: "joinUp",
   label: "Join with above block",
   run: function run(pm) {
-    var node = pm.selection.node;
     var point = joinPointAbove(pm);
     if (!point) return false;
     pm.tr.join(point).apply();
-    if (node) pm.setNodeSelection(point.move(-1));
+    if (pm.selection.node) pm.setNodeSelection(point.move(-1));
   },
   select: function select(pm) {
     return joinPointAbove(pm);
@@ -1135,14 +1255,20 @@ defineCommand({
 });
 
 function joinPointBelow(pm) {
-  var _pm$selection11 = pm.selection;
-  var node = _pm$selection11.node;
-  var to = _pm$selection11.to;
+  var _pm$selection10 = pm.selection;
+  var node = _pm$selection10.node;
+  var to = _pm$selection10.to;
 
   if (node) return (0, _transform.joinableBlocks)(pm.doc, to) ? to : null;else return (0, _transform.joinPoint)(pm.doc, to, 1);
 }
 
-defineCommand({
+// ;; #path=joinDown #kind=command
+// Join the selected block, or the closest ancestor of the selection
+// that can be joined, with the sibling after it.
+//
+// **Keybindings:** Alt-Down
+
+_options.defaultRegistry.register("command", {
   name: "joinDown",
   label: "Join with below block",
   run: function run(pm) {
@@ -1158,20 +1284,28 @@ defineCommand({
   key: "Alt-Down"
 });
 
-defineCommand({
+// ;; #path=lift #kind=command
+// Lift the selected block, or the closest ancestor block of the
+// selection that can be lifted, out of its parent node.
+//
+// **Keybindings:** Alt-Left
+//
+// Registers itself in the block [menu](#FIXME).
+
+_options.defaultRegistry.register("command", {
   name: "lift",
   label: "Lift out of enclosing block",
   run: function run(pm) {
-    var _pm$selection12 = pm.selection;
-    var from = _pm$selection12.from;
-    var to = _pm$selection12.to;
+    var _pm$selection11 = pm.selection;
+    var from = _pm$selection11.from;
+    var to = _pm$selection11.to;
 
     return pm.tr.lift(from, to).apply(andScroll);
   },
   select: function select(pm) {
-    var _pm$selection13 = pm.selection;
-    var from = _pm$selection13.from;
-    var to = _pm$selection13.to;
+    var _pm$selection12 = pm.selection;
+    var from = _pm$selection12.from;
+    var to = _pm$selection12.to;
 
     return (0, _transform.canLift)(pm.doc, from, to);
   },
@@ -1192,10 +1326,10 @@ function wrapCommand(type, name, labelName, isList, spec) {
     name: "wrap" + name,
     label: "Wrap in " + labelName,
     run: function run(pm) {
-      var _pm$selection14 = pm.selection;
-      var from = _pm$selection14.from;
-      var to = _pm$selection14.to;
-      var head = _pm$selection14.head;var doJoin = false;
+      var _pm$selection13 = pm.selection;
+      var from = _pm$selection13.from;
+      var to = _pm$selection13.to;
+      var head = _pm$selection13.head;var doJoin = false;
       if (isList && head && isAtTopOfListItem(pm.doc, from, to, this)) {
         // Don't do anything if this is the top of the list
         if (from.path[from.path.length - 2] == 0) return false;
@@ -1206,10 +1340,10 @@ function wrapCommand(type, name, labelName, isList, spec) {
       return tr.apply(andScroll);
     },
     select: function select(pm) {
-      var _pm$selection15 = pm.selection;
-      var from = _pm$selection15.from;
-      var to = _pm$selection15.to;
-      var head = _pm$selection15.head;
+      var _pm$selection14 = pm.selection;
+      var from = _pm$selection14.from;
+      var to = _pm$selection14.to;
+      var head = _pm$selection14.head;
 
       if (isList && head && isAtTopOfListItem(pm.doc, from, to, this) && from.path[from.path.length - 2] == 0) return false;
       return (0, _transform.canWrap)(pm.doc, from, to, this);
@@ -1220,6 +1354,13 @@ function wrapCommand(type, name, labelName, isList, spec) {
   }type.register("command", command);
 }
 
+// :: BulletList #path=wrapBulletList #kind=command
+// Wrap the selection in a bullet list.
+//
+// **Keybindings:** Alt-Right '*', Alt-Right '-'
+//
+// Registers itself in the block [menu](#FIXME).
+
 wrapCommand(_model.BulletList, "BulletList", "bullet list", true, {
   menuGroup: "block", menuRank: 40,
   icon: {
@@ -1228,6 +1369,13 @@ wrapCommand(_model.BulletList, "BulletList", "bullet list", true, {
   },
   key: ["Alt-Right '*'", "Alt-Right '-'"]
 });
+
+// :: OrderedList #path=wrapOrderedList #kind=command
+// Wrap the selection in an ordered list.
+//
+// **Keybindings:** Alt-Right '1'
+//
+// Registers itself in the block [menu](#FIXME).
 
 wrapCommand(_model.OrderedList, "OrderedList", "ordered list", true, {
   menuGroup: "block", menuRank: 41,
@@ -1238,6 +1386,13 @@ wrapCommand(_model.OrderedList, "OrderedList", "ordered list", true, {
   key: "Alt-Right '1'"
 });
 
+// :: BlockQuote #path=wrapBlockQuote #kind=command
+// Wrap the selection in a block quote.
+//
+// **Keybindings:** Alt-Right '>', Alt-Right '"'
+//
+// Registers itself in the block [menu](#FIXME).
+
 wrapCommand(_model.BlockQuote, "BlockQuote", "block quote", false, {
   menuGroup: "block", menuRank: 45,
   icon: {
@@ -1247,7 +1402,33 @@ wrapCommand(_model.BlockQuote, "BlockQuote", "block quote", false, {
   key: ["Alt-Right '>'", "Alt-Right '\"'"]
 });
 
-defineCommand({
+// :: HardBreak #path=insertHardBreak #kind=command
+// Replace the selection with a hard break node. If the selection is
+// in a node whose [type](#NodeType) has a truthy `isCode` property
+// (such as `CodeBlock` in the default schema), a regular newline is
+// inserted instead.
+//
+// **Keybindings:** Mod-Enter, Shift-Enter
+_model.HardBreak.register("command", {
+  name: "insertHardBreak",
+  label: "Insert hard break",
+  run: function run(pm) {
+    var _pm$selection15 = pm.selection;
+    var node = _pm$selection15.node;
+    var from = _pm$selection15.from;
+
+    if (node && node.isBlock) return false;else if (pm.doc.path(from.path).type.isCode) return pm.tr.typeText("\n").apply(andScroll);else return pm.tr.replaceSelection(this.create()).apply(andScroll);
+  },
+  key: ["Mod-Enter", "Shift-Enter"]
+});
+
+// ;; #path=newlineInCode #kind=command
+// If the selection is in a node whose type has a truthy `isCode`
+// property, replace the selection with a newline character.
+//
+// **Keybindings:** Enter
+
+_options.defaultRegistry.register("command", {
   name: "newlineInCode",
   label: "Insert newline",
   run: function run(pm) {
@@ -1260,7 +1441,13 @@ defineCommand({
   key: "Enter(10)"
 });
 
-defineCommand({
+// ;; #path=createParagraphNew #kind=command
+// If a content-less block node is selected, create an empty paragraph
+// before (if it is its parent's first child) or after it.
+//
+// **Keybindings:** Enter
+
+_options.defaultRegistry.register("command", {
   name: "createParagraphNear",
   label: "Create a paragraph near the selected leaf block",
   run: function run(pm) {
@@ -1277,7 +1464,13 @@ defineCommand({
   key: "Enter(20)"
 });
 
-defineCommand({
+// ;; #path=liftEmptyBlock #kind=command
+// If the cursor is in an empty textblock that can be lifted, lift the
+// block.
+//
+// **Keybindings:** Enter
+
+_options.defaultRegistry.register("command", {
   name: "liftEmptyBlock",
   label: "Move current block up",
   run: function run(pm) {
@@ -1285,14 +1478,23 @@ defineCommand({
     var head = _pm$selection18.head;
     var empty = _pm$selection18.empty;
 
-    if (!empty || head.offset > 0) return false;
-    if (head.path[head.path.length - 1] > 0 && pm.tr.split(head.shorten()).apply() !== false) return;
+    if (!empty || head.offset > 0 || pm.doc.path(head.path).size) return false;
+    if (head.depth > 1) {
+      var shorter = head.shorten();
+      if (shorter.offset > 0 && shorter.offset < pm.doc.path(shorter.path).size - 1 && pm.tr.split(shorter).apply() !== false) return;
+    }
     return pm.tr.lift(head).apply(andScroll);
   },
   key: "Enter(30)"
 });
 
-defineCommand({
+// ;; #path=splitBlock #kind=command
+// Split the parent block of the selection. If the selection is a text
+// selection, delete it.
+//
+// **Keybindings:** Enter
+
+_options.defaultRegistry.register("command", {
   name: "splitBlock",
   label: "Split the current block",
   run: function run(pm) {
@@ -1311,6 +1513,12 @@ defineCommand({
   key: "Enter(60)"
 });
 
+// :: ListItem #path=splitListItem #kind=command
+// If the selection is a text selection inside of a child of a list
+// item, split that child and the list item, and delete the selection.
+//
+// **Keybindings:** Enter
+
 _model.ListItem.register("command", {
   name: "splitListItem",
   label: "Split the current list item",
@@ -1319,9 +1527,8 @@ _model.ListItem.register("command", {
     var from = _pm$selection20.from;
     var to = _pm$selection20.to;
     var node = _pm$selection20.node;
-    var empty = _pm$selection20.empty;
 
-    if (node && node.isBlock || from.path.length < 2 || !_model.Pos.samePath(from.path, to.path) || empty && from.offset == 0) return false;
+    if (node && node.isBlock || from.path.length < 2 || !_model.Pos.samePath(from.path, to.path)) return false;
     var toParent = from.shorten(),
         grandParent = pm.doc.path(toParent.path);
     if (grandParent.type != this) return false;
@@ -1367,6 +1574,12 @@ function blockTypeCommand(type, name, labelName, attrs, key) {
   });
 }
 
+// :: Heading #path=makeH_ #kind=command
+// The commands `makeH1` to `makeH6` set the textblocks in the
+// selection to become headers with the given level.
+//
+// **Keybindings:** Mod-H '1' through Mod-H '6'
+
 blockTypeCommand(_model.Heading, "makeH1", "heading 1", { level: 1 }, "Mod-H '1'");
 blockTypeCommand(_model.Heading, "makeH2", "heading 2", { level: 2 }, "Mod-H '2'");
 blockTypeCommand(_model.Heading, "makeH3", "heading 3", { level: 3 }, "Mod-H '3'");
@@ -1374,8 +1587,24 @@ blockTypeCommand(_model.Heading, "makeH4", "heading 4", { level: 4 }, "Mod-H '4'
 blockTypeCommand(_model.Heading, "makeH5", "heading 5", { level: 5 }, "Mod-H '5'");
 blockTypeCommand(_model.Heading, "makeH6", "heading 6", { level: 6 }, "Mod-H '6'");
 
+// :: Paragraph #path=makeParagraph #kind=command
+// Set the textblocks in the selection to be regular paragraphs.
+//
+// **Keybindings:** Mod-P
+
 blockTypeCommand(_model.Paragraph, "makeParagraph", "paragraph", null, "Mod-P");
+
+// :: CodeBlock #path=makeCodeBlock #kind=command
+// Set the textblocks in the selection to be code blocks.
+//
+// **Keybindings:** Mod-\
+
 blockTypeCommand(_model.CodeBlock, "makeCodeBlock", "code block", null, "Mod-\\");
+
+// :: HorizontalRule #path=insertHorizontalRule #kind=command
+// Replace the selection with a horizontal rule.
+//
+// **Keybindings:** Mod-=
 
 _model.HorizontalRule.register("command", {
   name: "insertHorizontalRule",
@@ -1383,44 +1612,18 @@ _model.HorizontalRule.register("command", {
   run: function run(pm) {
     return pm.tr.replaceSelection(this.create()).apply(andScroll);
   },
-  key: "Mod-Space"
+  key: "Mod-="
 });
 
-defineCommand({
-  name: "undo",
-  label: "Undo last change",
-  run: function run(pm) {
-    pm.scrollIntoView();return pm.history.undo();
-  },
-  select: function select(pm) {
-    return pm.history.canUndo();
-  },
-  menuGroup: "history", menuRank: 10,
-  icon: {
-    width: 1024, height: 1024,
-    path: "M761 1024c113-206 132-520-313-509v253l-384-384 384-384v248c534-13 594 472 313 775z"
-  },
-  key: "Mod-Z"
-});
+// ;; #path=textblockType #kind=command
+// Change the type of the selected textblocks. Takes one parameter,
+// `type`, which should be a `{type: NodeType, attrs: ?Object}`
+// object, giving the new type and its attributes.
+//
+// Registers itself in the block [menu](#FIXME), where it creates the
+// textblock type dropdown.
 
-defineCommand({
-  name: "redo",
-  label: "Redo last undone change",
-  run: function run(pm) {
-    pm.scrollIntoView();return pm.history.redo();
-  },
-  select: function select(pm) {
-    return pm.history.canRedo();
-  },
-  menuGroup: "history", menuRank: 20,
-  icon: {
-    width: 1024, height: 1024,
-    path: "M576 248v-248l384 384-384 384v-253c-446-10-427 303-313 509-280-303-221-789 313-775z"
-  },
-  key: ["Mod-Y", "Shift-Mod-Z"]
-});
-
-defineCommand({
+_options.defaultRegistry.register("command", {
   name: "textblockType",
   label: "Change block type",
   run: function run(pm, type) {
@@ -1451,8 +1654,8 @@ function listTextblockTypes(pm) {
   if (cached) return cached;
 
   var found = [];
-  for (var _name4 in pm.schema.nodes) {
-    var type = pm.schema.nodes[_name4];
+  for (var _name3 in pm.schema.nodes) {
+    var type = pm.schema.nodes[_name3];
     if (!type.textblockTypes) continue;
     for (var i = 0; i < type.textblockTypes.length; i++) {
       var info = type.textblockTypes[i];
@@ -1492,8 +1695,16 @@ function nodeAboveSelection(pm) {
   return i == 0 ? false : sel.head.shorten(i - 1);
 }
 
-defineCommand({
-  name: "selectParentBlock",
+// ;; #path=selectParentBlock #kind=command
+// Move the selection to the node wrapping the current selection, if
+// any. (Will not select the document node.)
+//
+// **Keybindings:** Esc
+//
+// Registers itself in the block [menu](#FIXME).
+
+_options.defaultRegistry.register("command", {
+  name: "selectParentNode",
   label: "Select parent node",
   run: function run(pm) {
     var node = nodeAboveSelection(pm);
@@ -1554,8 +1765,13 @@ function selectBlockHorizontally(pm, dir) {
   return false;
 }
 
-defineCommand({
-  name: "selectBlockLeft",
+// ;; #path=selectBlockLeft #kind=command
+// Select the node directly before the cursor, if any.
+//
+// **Keybindings:** Left, Mod-Left
+
+_options.defaultRegistry.register("command", {
+  name: "selectNodeLeft",
   label: "Move the selection onto or out of the block to the left",
   run: function run(pm) {
     var done = selectBlockHorizontally(pm, -1);
@@ -1565,8 +1781,13 @@ defineCommand({
   key: ["Left", "Mod-Left"]
 });
 
-defineCommand({
-  name: "selectBlockRight",
+// ;; #path=selectNodeRight #kind=command
+// Select the node directly after the cursor, if any.
+//
+// **Keybindings:** Right, Mod-Right
+
+_options.defaultRegistry.register("command", {
+  name: "selectNodeRight",
   label: "Move the selection onto or out of the block to the right",
   run: function run(pm) {
     var done = selectBlockHorizontally(pm, 1);
@@ -1614,8 +1835,13 @@ function selectBlockVertically(pm, dir) {
   return true;
 }
 
-defineCommand({
-  name: "selectBlockUp",
+// ;; #path=selectNodeUp #kind=command
+// Select the node directly above the cursor, if any.
+//
+// **Keybindings:** Up
+
+_options.defaultRegistry.register("command", {
+  name: "selectNodeUp",
   label: "Move the selection onto or out of the block above",
   run: function run(pm) {
     var done = selectBlockVertically(pm, -1);
@@ -1625,8 +1851,13 @@ defineCommand({
   key: "Up"
 });
 
-defineCommand({
-  name: "selectBlockDown",
+// ;; #path=selectNodeDown #kind=command
+// Select the node directly below the cursor, if any.
+//
+// **Keybindings:** Down
+
+_options.defaultRegistry.register("command", {
+  name: "selectNodeDown",
   label: "Move the selection onto or out of the block below",
   run: function run(pm) {
     var done = selectBlockVertically(pm, 1);
@@ -1636,7 +1867,55 @@ defineCommand({
   key: "Down"
 });
 
-},{"../dom":3,"../model":26,"../transform":38,"../util/sortedinsert":50,"./char":5,"./keys":13,"./selection":17}],7:[function(require,module,exports){
+// ;; #path=undo #kind=command
+// Undo the most recent change event, if any.
+//
+// **Keybindings:** Mod-Z
+//
+// Registers itself in the history [menu](#FIXME).
+
+_options.defaultRegistry.register("command", {
+  name: "undo",
+  label: "Undo last change",
+  run: function run(pm) {
+    pm.scrollIntoView();return pm.history.undo();
+  },
+  select: function select(pm) {
+    return pm.history.canUndo();
+  },
+  menuGroup: "history", menuRank: 10,
+  icon: {
+    width: 1024, height: 1024,
+    path: "M761 1024c113-206 132-520-313-509v253l-384-384 384-384v248c534-13 594 472 313 775z"
+  },
+  key: "Mod-Z"
+});
+
+// ;; #path=redo #kind=command
+// Redo the most recently undone change event, if any.
+//
+// **Keybindings:** Mod-Y, Shift-Mod-Z
+//
+// Registers itself in the history [menu](#FIXME).
+
+_options.defaultRegistry.register("command", {
+  name: "redo",
+  label: "Redo last undone change",
+  run: function run(pm) {
+    pm.scrollIntoView();return pm.history.redo();
+  },
+  select: function select(pm) {
+    return pm.history.canRedo();
+  },
+  menuGroup: "history", menuRank: 20,
+  icon: {
+    width: 1024, height: 1024,
+    path: "M576 248v-248l384 384-384 384v-253c-446-10-427 303-313 509-280-303-221-789 313-775z"
+  },
+  key: ["Mod-Y", "Shift-Mod-Z"]
+});
+
+},{"../dom":3,"../model":26,"../transform":38,"../util/sortedinsert":50,"./char":5,"./keys":13,"./options":15,"./selection":17}],7:[function(require,module,exports){
 "use strict";
 
 var _dom = require("../dom");
@@ -1846,7 +2125,7 @@ var _main = require("./main");
 function options(path, ranges) {
   return {
     onRender: function onRender(node, dom, offset) {
-      if (node.type.contains == null) {
+      if (!node.isText && node.type.contains == null) {
         dom.contentEditable = false;
         if (node.isBlock) dom.setAttribute("pm-leaf", "true");
       }
@@ -1908,7 +2187,7 @@ function draw(pm, doc) {
 }
 
 function adjustTrailingHacks(dom, node) {
-  var needs = node.size == 0 || node.lastChild.type.isBR ? "br" : node.lastChild.type.contains == null ? "text" : null;
+  var needs = node.size == 0 || node.lastChild.type.isBR ? "br" : !node.lastChild.isText && node.lastChild.type.contains == null ? "text" : null;
   var last = dom.lastChild;
   var has = !last || last.nodeType != 1 || !last.hasAttribute("pm-ignore") ? null : last.nodeName == "BR" ? "br" : "text";
   if (needs != has) {
@@ -1958,7 +2237,13 @@ function redraw(pm, dirty, doc, prev) {
         reuseDOM = true;
       } else if (pChild && !child.isText && child.sameMarkup(pChild) && dirty.get(pChild) != _main.DIRTY_REDRAW) {
         reuseDOM = true;
-        scan(domPos, child, pChild);
+        var contentNode = domPos;
+        for (;;) {
+          var first = contentNode.firstChild;
+          if (!first || first.hasAttribute("pm-ignore") || first.hasAttribute("pm-offset")) break;
+          contentNode = first;
+        }
+        scan(contentNode, child, pChild);
       } else {
         var rendered = (0, _serializeDom.renderNodeToDOM)(child, opts, offset);
         dom.insertBefore(rendered, domPos);
@@ -2494,6 +2779,18 @@ Object.defineProperty(exports, "defineOption", {
     return _options.defineOption;
   }
 });
+Object.defineProperty(exports, "Registry", {
+  enumerable: true,
+  get: function get() {
+    return _options.Registry;
+  }
+});
+Object.defineProperty(exports, "defaultRegistry", {
+  enumerable: true,
+  get: function get() {
+    return _options.defaultRegistry;
+  }
+});
 
 var _selection = require("./selection");
 
@@ -2617,6 +2914,7 @@ var Input = (function () {
     this.draggingFrom = false;
 
     this.keymaps = [];
+    this.defaultKeymap = null;
 
     this.storedMarks = null;
 
@@ -2710,7 +3008,7 @@ function dispatchKey(pm, name, e) {
   var result = undefined;
   for (var i = 0; !result && i < pm.input.keymaps.length; i++) {
     result = handle(pm.input.keymaps[i].map.lookup(name, pm));
-  }if (!result) result = handle(pm.options.keymap.lookup(name, pm)) || handle(_capturekeys.captureKeys.lookup(name));
+  }if (!result) result = handle(pm.baseKeymap.lookup(name, pm)) || handle(_capturekeys.captureKeys.lookup(name));
 
   // If the key should be used in sequence with the next key, store the keyname internally.
   if (result == "multi") pm.input.keySeq = name;
@@ -2778,7 +3076,8 @@ function selectClickedNode(pm, e) {
   e.preventDefault();
 }
 
-var lastClick = 0;
+var lastClick = 0,
+    oneButLastClick = 0;
 
 handlers.mousedown = function (pm, e) {
   if (e.ctrlKey) return selectClickedNode(pm, e);
@@ -2786,9 +3085,27 @@ handlers.mousedown = function (pm, e) {
   pm.sel.pollForUpdate();
 
   var now = Date.now(),
-      multi = now - lastClick < 500;
+      doubleClick = now - lastClick < 500,
+      tripleClick = now - oneButLastClick < 600;
+  oneButLastClick = lastClick;
   lastClick = now;
-  if (pm.input.shiftKey || multi) return;
+  if (tripleClick) {
+    e.preventDefault();
+    var pos = (0, _selection.selectableNodeAbove)(pm, e.target, { left: e.clientX, top: e.clientY }, true);
+    if (pos) {
+      var node = pm.doc.nodeAfter(pos);
+      if (node.isBlock && !node.isTextblock) {
+        pm.setNodeSelection(pos);
+      } else {
+        var path = node.isInline ? pos.path : pos.toPath();
+        if (node.isInline) node = pm.doc.path(path);
+        pm.setTextSelection(new _model.Pos(path, 0), new _model.Pos(path, node.size));
+      }
+      pm.focus();
+    }
+    return;
+  }
+  if (pm.input.shiftKey || doubleClick) return;
 
   var x = e.clientX,
       y = e.clientY,
@@ -2796,14 +3113,14 @@ handlers.mousedown = function (pm, e) {
   var up = function up() {
     removeEventListener("mouseup", up);
     removeEventListener("mousemove", move);
-    if (moved) {
-      pm.sel.pollForUpdate();
+    if ((0, _selection.handleNodeClick)(pm, e)) return;
+
+    var pos = !moved && (0, _selection.selectableNodeAbove)(pm, e.target, { left: e.clientX, top: e.clientY });
+    if (pos) {
+      pm.setNodeSelection(pos);
+      pm.focus();
     } else {
-      var pos = (0, _selection.selectableNodeAbove)(pm, e.target, { left: e.clientX, top: e.clientY });
-      if (pos) {
-        pm.setNodeSelection(pos);
-        pm.focus();
-      }
+      pm.sel.pollForUpdate();
     }
   };
   var move = function move(e) {
@@ -2888,6 +3205,7 @@ handlers.input = function (pm) {
     return;
   }
 
+  pm.sel.stopPollingForUpdate();
   (0, _domchange.applyDOMChange)(pm);
   pm.scrollIntoView();
 };
@@ -3155,7 +3473,7 @@ var Keymap = (function () {
   _createClass(Keymap, [{
     key: "addBinding",
     value: function addBinding(keyname, value) {
-      var keys = keyname.split(/ +(?!\')/).map(normalizeKeyName);
+      var keys = keyname.split(/ +(?!\'$)/).map(normalizeKeyName);
       for (var i = 0; i < keys.length; i++) {
         var _name = keys.slice(0, i + 1).join(" ");
         var val = i == keys.length - 1 ? value : "...";
@@ -3169,7 +3487,7 @@ var Keymap = (function () {
   }, {
     key: "removeBinding",
     value: function removeBinding(keyname) {
-      var keys = keyname.split(/ +(?!\')/).map(normalizeKeyName);
+      var keys = keyname.split(/ +(?!\'$)/).map(normalizeKeyName);
       for (var i = keys.length - 1; i >= 0; i--) {
         var _name2 = keys.slice(0, i).join(" ");
         var val = this.bindings[_name2];
@@ -3309,7 +3627,7 @@ var ProseMirror = (function () {
 
     // :: Object<Command>
     // The commands available in the editor.
-    this.commands = (0, _commands.initCommands)(this.schema);
+    this.commands = (0, _commands.initCommands)(this);
     this.commandKeys = Object.create(null);
 
     (0, _options.initOptions)(this);
@@ -3480,7 +3798,7 @@ var ProseMirror = (function () {
 
     // :: (Pos, ?bool)
     // Verify that the given position is valid in the current document,
-    // and throw an error otherwise. When `block` is true, the position
+    // and throw an error otherwise. When `textblock` is true, the position
     // must also fall within a textblock node.
   }, {
     key: "checkPos",
@@ -3589,6 +3907,8 @@ var ProseMirror = (function () {
         }
       }
     }
+  }, {
+    key: "markRange",
 
     // :: (Pos, Pos, ?Object) → MarkedRange
     // Create a marked range between the given positions. Marked ranges
@@ -3613,8 +3933,6 @@ var ProseMirror = (function () {
     // **`className`**: string
     //   : A CSS class to add to the inline content that is part of this
     //     range.
-  }, {
-    key: "markRange",
     value: function markRange(from, to, options) {
       this.checkPos(from);
       this.checkPos(to);
@@ -3739,19 +4057,31 @@ var ProseMirror = (function () {
       var cached = this.commandKeys[name];
       if (cached !== undefined) return cached;
 
-      var cmd = this.commands[name];
+      var cmd = this.commands[name],
+          keymap = this.baseKeymap;
       if (!cmd) return this.commandKeys[name] = null;
       var key = cmd.spec.key || (_dom.browser.mac ? cmd.spec.macKey : cmd.spec.pcKey);
       if (key) {
         key = (0, _keys.normalizeKeyName)(Array.isArray(key) ? key[0] : key);
-        var deflt = this.options.keymap.bindings[key];
+        var deflt = keymap.bindings[key];
         if (Array.isArray(deflt) ? deflt.indexOf(name) > -1 : deflt == name) return this.commandKeys[name] = key;
       }
-      for (var _key in this.options.keymap.bindings) {
-        var bound = this.options.keymap.bindings[_key];
+      for (var _key in keymap.bindings) {
+        var bound = keymap.bindings[_key];
         if (Array.isArray(bound) ? bound.indexOf(name) > -1 : bound == name) return this.commandKeys[name] = _key;
       }
       return this.commandKeys[name] = null;
+    }
+  }, {
+    key: "registry",
+    value: function registry(name, f) {
+      var _this2 = this;
+
+      this.schema.registry(name, f);
+      this.options.registries.forEach(function (reg) {
+        var array = reg.registry[name];
+        if (array) for (var i = 0; i < array.length; i++) f(array[i], _this2);
+      });
     }
   }, {
     key: "markRangeDirty",
@@ -3797,6 +4127,11 @@ var ProseMirror = (function () {
     key: "tr",
     get: function get() {
       return new EditorTransform(this);
+    }
+  }, {
+    key: "baseKeymap",
+    get: function get() {
+      return this.options.keymap || this.defaultKeymap || (this.defaultKeymap = (0, _commands.defaultKeymap)(this));
     }
   }, {
     key: "selectedDoc",
@@ -3934,6 +4269,9 @@ var EditorTransform = (function (_Transform) {
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
+
+var _createClass = (function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; })();
+
 exports.defineOption = defineOption;
 exports.parseOptions = parseOptions;
 exports.initOptions = initOptions;
@@ -3943,7 +4281,44 @@ function _classCallCheck(instance, Constructor) { if (!(instance instanceof Cons
 
 var _model = require("../model");
 
-var _commands = require("./commands");
+// ;; A registry is a namespace for [commands](#Commands), input
+// rules, and so on. They provide a way to define commands and such in
+// a scoped way, without having them show up on all your editors by
+// default all of a sudden. See also the [`registries`
+// option](#registries).
+
+var Registry = (function () {
+  // :: (string)
+  // Create a new registry with the given name.
+
+  function Registry(name) {
+    _classCallCheck(this, Registry);
+
+    this.name = name;
+    this.registry = Object.create(null);
+  }
+
+  // :: Registry
+  // The registry in which built-in commands and input rules are
+  // registered. The default content of the `registries` option.
+
+  // :: (string, *)
+  // Register a new item in this registry.
+
+  _createClass(Registry, [{
+    key: "register",
+    value: function register(name, value) {
+      ;(this.registry[name] || (this.registry[name] = [])).push(value);
+    }
+  }]);
+
+  return Registry;
+})();
+
+exports.Registry = Registry;
+var defaultRegistry = new Registry("default");
+
+exports.defaultRegistry = defaultRegistry;
 
 var Option = function Option(defaultValue, update, updateOnInit) {
   _classCallCheck(this, Option);
@@ -3953,62 +4328,7 @@ var Option = function Option(defaultValue, update, updateOnInit) {
   this.updateOnInit = updateOnInit !== false;
 };
 
-var options = {
-  __proto__: null,
-
-  // :: Schema #path=schema #kind=option
-  // The [schema](#Schema) that the editor's document should use.
-  schema: new Option(_model.defaultSchema, false, false),
-
-  // :: any #path=doc #kind=option
-  // The starting document. Usually a `Node`, but can be in another
-  // format when the `docFormat` option is also specified.
-  doc: new Option(null, function (pm, value) {
-    pm.setDoc(value);
-  }, false),
-
-  // :: ?string #path=docFormat #kind=option
-  // The format in which the `doc` option is given. Defaults to `null`
-  // (a raw `Node`).
-  docFormat: new Option(null),
-
-  // :: ?union<DOMNode, (DOMNode)> #path=place #kind=option
-  // Determines the placement of the editor in the page. When `null`,
-  // the editor is not placed. When a DOM node is given, the editor is
-  // appended to that node. When a function is given, it is called
-  // with the editor's wrapping DOM node, and is expected to place it
-  // into the document.
-  place: new Option(null),
-
-  // :: Keymap #path=keymap #kind=option
-  // The base [keymap](#Keymap). When not given, a default keymap is
-  // synthesized from the default key bindings provided by the
-  // [commands](#Command) that are in scope for the editor.
-  keymap: new Option(null, function (pm, value) {
-    if (!value) pm.options.keymap = (0, _commands.defaultKeymap)(pm);
-  }),
-
-  // :: number #path=historyDepth #kind=option
-  // The amount of history events that are collected before the oldest
-  // events are discarded. Defaults to 100.
-  historyDepth: new Option(100),
-
-  // :: number #path=historyEventDelay #kind=option
-  // The amount of milliseconds that must pass between changes to
-  // start a new history event. Defaults to 500.
-  historyEventDelay: new Option(500),
-
-  // :: string #path=commandParamHandler #kind=option
-  // The name of the handler used to prompt the user for [command
-  // parameters](#CommandParam). Only relevant when multiple such
-  // handlers are loaded, and you want to choose between them.
-  commandParamHandler: new Option("default"),
-
-  // :: ?string #path=label #kind=option
-  // The label of the editor. When set, the editable DOM node gets an
-  // `aria-label` attribute with this value.
-  label: new Option(null)
-};
+var options = Object.create(null);
 
 // :: (string, any, (pm: ProseMirror, newValue: any, oldValue: any, init: bool), bool)
 // Define a new option. The `update` handler will be called with the
@@ -4020,6 +4340,62 @@ var options = {
 function defineOption(name, defaultValue, update, updateOnInit) {
   options[name] = new Option(defaultValue, update, updateOnInit);
 }
+
+// :: Schema #path=schema #kind=option
+// The [schema](#Schema) that the editor's document should use.
+defineOption("schema", _model.defaultSchema, false);
+
+// :: any #path=doc #kind=option
+// The starting document. Usually a `Node`, but can be in another
+// format when the `docFormat` option is also specified.
+defineOption("doc", null, function (pm, value) {
+  return pm.setDoc(value);
+}, false);
+
+// :: ?string #path=docFormat #kind=option
+// The format in which the `doc` option is given. Defaults to `null`
+// (a raw `Node`).
+defineOption("docFormat", null);
+
+// :: ?union<DOMNode, (DOMNode)> #path=place #kind=option
+// Determines the placement of the editor in the page. When `null`,
+// the editor is not placed. When a DOM node is given, the editor is
+// appended to that node. When a function is given, it is called
+// with the editor's wrapping DOM node, and is expected to place it
+// into the document.
+defineOption("place", null);
+
+// :: Keymap #path=keymap #kind=option
+// The base [keymap](#Keymap). When not given, a default keymap is
+// synthesized from the default key bindings provided by the
+// [commands](#Command) that are in scope for the editor.
+defineOption("keymap", null);
+
+// :: [Registry]
+// The set of [registries](#Registry) the editor should load items
+// from.
+defineOption("registries", [defaultRegistry], false);
+
+// :: number #path=historyDepth #kind=option
+// The amount of history events that are collected before the oldest
+// events are discarded. Defaults to 100.
+defineOption("historyDepth", 100);
+
+// :: number #path=historyEventDelay #kind=option
+// The amount of milliseconds that must pass between changes to
+// start a new history event. Defaults to 500.
+defineOption("historyEventDelay", 500);
+
+// :: string #path=commandParamHandler #kind=option
+// The name of the handler used to prompt the user for [command
+// parameters](#CommandParam). Only relevant when multiple such
+// handlers are loaded, and you want to choose between them.
+defineOption("commandParamHandler", "default");
+
+// :: ?string #path=label #kind=option
+// The label of the editor. When set, the editable DOM node gets an
+// `aria-label` attribute with this value.
+defineOption("label", null);
 
 function parseOptions(obj) {
   var result = Object.create(null);
@@ -4051,7 +4427,7 @@ function setOption(pm, name, value) {
   if (desc.update) desc.update(pm, value, old, false);
 }
 
-},{"../model":26,"./commands":6}],16:[function(require,module,exports){
+},{"../model":26}],16:[function(require,module,exports){
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -4278,6 +4654,7 @@ exports.findSelectionNear = findSelectionNear;
 exports.findSelectionAtStart = findSelectionAtStart;
 exports.findSelectionAtEnd = findSelectionAtEnd;
 exports.selectableNodeAbove = selectableNodeAbove;
+exports.handleNodeClick = handleNodeClick;
 exports.verticalMotionLeavesTextblock = verticalMotionLeavesTextblock;
 exports.setDOMSelectionToPos = setDOMSelectionToPos;
 
@@ -4342,11 +4719,18 @@ var SelectionState = (function () {
           } else if (!_this2.readUpdate() && ++n == 1) {
             _this2.pollTimeout = setTimeout(check, 50);
           } else {
-            _this2.pollState = null;
-            _this2.pollToSync();
+            _this2.stopPollingForUpdate();
           }
       };
       this.pollTimeout = setTimeout(check, 20);
+    }
+  }, {
+    key: "stopPollingForUpdate",
+    value: function stopPollingForUpdate() {
+      if (this.pollState == "update") {
+        this.pollState = null;
+        this.pollToSync();
+      }
     }
   }, {
     key: "domChanged",
@@ -4471,8 +4855,7 @@ var SelectionState = (function () {
     value: function beforeStartOp() {
       if (this.pollState == "update" && this.readUpdate()) {
         clearTimeout(this.pollTimeout);
-        this.pollState = null;
-        this.pollToSync();
+        this.stopPollingForUpdate();
       } else {
         this.syncDOM();
       }
@@ -4643,14 +5026,14 @@ var NodeSelection = (function (_Selection2) {
 
 exports.NodeSelection = NodeSelection;
 
-function pathFromDOM(node) {
+function pathFromDOM(pm, node) {
   var path = [];
-  for (;;) {
+  for (; node != pm.content;) {
     var attr = node.getAttribute("pm-offset");
-    if (!attr) return path;
-    path.unshift(+attr);
+    if (attr) path.unshift(+attr);
     node = node.parentNode;
   }
+  return path;
 }
 
 function widthFromDOM(dom) {
@@ -4681,7 +5064,7 @@ function posFromDOMInner(pm, dom, domOffset, loose) {
     dom = _parent;
   }
 
-  var path = pathFromDOM(dom);
+  var path = pathFromDOM(pm, dom);
   if (dom.hasAttribute("pm-leaf")) return _model.Pos.from(path, extraOffset + (domOffset ? 1 : 0));
 
   var offset = 0;
@@ -4981,18 +5364,55 @@ function findSelectionAtEnd(node, path, text) {
   return findSelectionIn(node, path.slice(), node.size, -1, text);
 }
 
+// ;; #path=NodeType #kind=class #noAnchor
+// You can add several properties to [node types](#NodeType) to
+// influence the way the editor interacts with them.
+
+// :: (node: Node, path: [number], dom: DOMNode, coords: {left: number, top: number}) → ?Pos
+// #path=NodeType.prototype.countCoordsAsChild
+// Specifies that, if this node is clicked, a child node might
+// actually be meant. This is used to, for example, make clicking a
+// list marker (which, in the DOM, is part of the list node) select
+// the list item it belongs to. Should return null if the given
+// coordinates don't refer to a child node, or the [position](#Pos)
+// before thechild otherwise.
+
 function selectableNodeAbove(pm, dom, coords, liberal) {
   for (; dom && dom != pm.content; dom = dom.parentNode) {
     if (dom.hasAttribute("pm-offset")) {
-      var path = pathFromDOM(dom);
-      var node = pm.doc.path(path);
-      if (node.type.clicked) {
-        var result = node.type.clicked(node, path, dom, coords);
+      var path = pathFromDOM(pm, dom),
+          node = pm.doc.path(path);
+      if (node.type.countCoordsAsChild) {
+        var result = node.type.countCoordsAsChild(node, path, dom, coords);
         if (result) return result;
       }
       // Leaf nodes are implicitly clickable
       if ((liberal || node.type.contains == null) && node.type.selectable) return _model.Pos.from(path);
-      return null;
+      if (!liberal) return null;
+    }
+  }
+}
+
+// :: (pm: ProseMirror, event: MouseEvent, path: [number], node: Node) → bool
+// #path=NodeType.prototype.handleClick
+// If a node is directly clicked (that is, the click didn't land in a
+// DOM node belonging to a child node), and its type has a
+// `handleClick` method, that method is given a chance to handle the
+// click. The method is called, and should return `false` if it did
+// _not_ handle the click.
+//
+// The `event` passed is the event for `"mousedown"`, but calling
+// `preventDefault` on it has no effect, since this method is only
+// called after a corresponding `"mouseup"` has occurred and
+// ProseMirror has determined that this is not a drag or multi-click
+// event.
+
+function handleNodeClick(pm, event) {
+  for (var dom = event.target; dom && dom != pm.content; dom = dom.parentNode) {
+    if (dom.hasAttribute("pm-offset")) {
+      var path = pathFromDOM(pm, dom),
+          node = pm.doc.path(path);
+      return node.type.handleClick && node.type.handleClick(pm, event, path, node) !== false;
     }
   }
 }
@@ -5498,7 +5918,7 @@ var MenuBar = (function () {
     this.pm = pm;
 
     this.menuElt = (0, _dom.elt)("div", { "class": "ProseMirror-menubar-inner" });
-    this.wrapper = (0, _dom.elt)("div", { "class": "ProseMirror-menubar" }, (0, _dom.elt)("div", { "class": "ProseMirror-menu", style: "visibility: hiffdden; z-index: 100" }, (0, _dom.elt)("span", { "class": "ProseMirror-menuicon" }, (0, _dom.elt)("div", { "class": "ProseMirror-icon" }, "x"))), this.menuElt);
+    this.wrapper = (0, _dom.elt)("div", { "class": "ProseMirror-menubar" }, (0, _dom.elt)("div", { "class": "ProseMirror-menu" }, (0, _dom.elt)("span", { "class": "ProseMirror-menuicon" }, (0, _dom.elt)("div", { "class": "ProseMirror-icon" }, "x"))), this.menuElt);
     pm.wrapper.insertBefore(this.wrapper, pm.wrapper.firstChild);
 
     this.update = new _update.MenuUpdate(pm, "selectionChange change activeMarkChange", function () {
@@ -5738,7 +6158,7 @@ var Tooltip = (function () {
 
 exports.Tooltip = Tooltip;
 
-(0, _dom.insertCSS)("\n\n.ProseMirror-tooltip {\n  position: absolute;\n  display: none;\n  box-sizing: border-box;\n  -moz-box-sizing: border- box;\n  overflow: hidden;\n\n  -webkit-transition: width 0.4s ease-out, height 0.4s ease-out, left 0.4s ease-out, top 0.4s ease-out, opacity 0.2s;\n  -moz-transition: width 0.4s ease-out, height 0.4s ease-out, left 0.4s ease-out, top 0.4s ease-out, opacity 0.2s;\n  transition: width 0.4s ease-out, height 0.4s ease-out, left 0.4s ease-out, top 0.4s ease-out, opacity 0.2s;\n  opacity: 0;\n\n  border-radius: 5px;\n  padding: 3px 7px;\n  margin: 0;\n  background: #444;\n  border-color: #777;\n  color: white;\n\n  z-index: 5;\n}\n\n.ProseMirror-tooltip-pointer {\n  content: \"\";\n  position: absolute;\n  display: none;\n  width: 0; height: 0;\n\n  -webkit-transition: left 0.4s ease-out, top 0.4s ease-out, opacity 0.2s;\n  -moz-transition: left 0.4s ease-out, top 0.4s ease-out, opacity 0.2s;\n  transition: left 0.4s ease-out, top 0.4s ease-out, opacity 0.2s;\n  opacity: 0;\n\n  z-index: 10;\n}\n\n.ProseMirror-tooltip-pointer-above {\n  border-left: 6px solid transparent;\n  border-right: 6px solid transparent;\n  border-top: 6px solid #444;\n}\n\n.ProseMirror-tooltip-pointer-below {\n  border-left: 6px solid transparent;\n  border-right: 6px solid transparent;\n  border-bottom: 6px solid #444;\n}\n\n.ProseMirror-tooltip-pointer-right {\n  border-top: 6px solid transparent;\n  border-bottom: 6px solid transparent;\n  border-right: 6px solid #444;\n}\n\n.ProseMirror-tooltip-pointer-left {\n  border-top: 6px solid transparent;\n  border-bottom: 6px solid transparent;\n  border-left: 6px solid #444;\n}\n\n.ProseMirror-tooltip input[type=\"text\"],\n.ProseMirror-tooltip textarea {\n  background: #666;\n  color: white;\n  border: none;\n  outline: none;\n}\n\n.ProseMirror-tooltip input[type=\"text\"] {\n  padding: 0 4px;\n}\n\n");
+(0, _dom.insertCSS)("\n\n.ProseMirror-tooltip {\n  position: absolute;\n  display: none;\n  box-sizing: border-box;\n  -moz-box-sizing: border- box;\n  overflow: hidden;\n\n  -webkit-transition: width 0.4s ease-out, height 0.4s ease-out, left 0.4s ease-out, top 0.4s ease-out, opacity 0.2s;\n  -moz-transition: width 0.4s ease-out, height 0.4s ease-out, left 0.4s ease-out, top 0.4s ease-out, opacity 0.2s;\n  transition: width 0.4s ease-out, height 0.4s ease-out, left 0.4s ease-out, top 0.4s ease-out, opacity 0.2s;\n  opacity: 0;\n\n  border-radius: 5px;\n  padding: 3px 7px;\n  margin: 0;\n  background: #444;\n  border-color: #777;\n  color: white;\n\n  z-index: 11;\n}\n\n.ProseMirror-tooltip-pointer {\n  content: \"\";\n  position: absolute;\n  display: none;\n  width: 0; height: 0;\n\n  -webkit-transition: left 0.4s ease-out, top 0.4s ease-out, opacity 0.2s;\n  -moz-transition: left 0.4s ease-out, top 0.4s ease-out, opacity 0.2s;\n  transition: left 0.4s ease-out, top 0.4s ease-out, opacity 0.2s;\n  opacity: 0;\n\n  z-index: 12;\n}\n\n.ProseMirror-tooltip-pointer-above {\n  border-left: 6px solid transparent;\n  border-right: 6px solid transparent;\n  border-top: 6px solid #444;\n}\n\n.ProseMirror-tooltip-pointer-below {\n  border-left: 6px solid transparent;\n  border-right: 6px solid transparent;\n  border-bottom: 6px solid #444;\n}\n\n.ProseMirror-tooltip-pointer-right {\n  border-top: 6px solid transparent;\n  border-bottom: 6px solid transparent;\n  border-right: 6px solid #444;\n}\n\n.ProseMirror-tooltip-pointer-left {\n  border-top: 6px solid transparent;\n  border-bottom: 6px solid transparent;\n  border-left: 6px solid #444;\n}\n\n.ProseMirror-tooltip input[type=\"text\"],\n.ProseMirror-tooltip textarea {\n  background: #666;\n  color: white;\n  border: none;\n  outline: none;\n}\n\n.ProseMirror-tooltip input[type=\"text\"] {\n  padding: 0 4px;\n}\n\n");
 
 },{"../dom":3}],22:[function(require,module,exports){
 "use strict";
@@ -5819,12 +6239,16 @@ var MenuUpdate = (function () {
   }, {
     key: "force",
     value: function force() {
-      this.mustUpdate = false;
-      this.updateInfo = null;
-      this.lastFlush = Date.now();
-      clearTimeout(this.timeout);
-      var update = this.prepare();
-      if (update) update();
+      if (this.pm.operation) {
+        this.onEvent();
+      } else {
+        this.mustUpdate = false;
+        this.updateInfo = null;
+        this.lastFlush = Date.now();
+        clearTimeout(this.timeout);
+        var update = this.prepare();
+        if (update) update();
+      }
     }
   }]);
 
@@ -7034,6 +7458,9 @@ if (typeof Symbol != "undefined") {
 //   document structure
 //
 // * The data type for document [positions](#Pos)
+//
+// This module does not depend on the browser API being available
+// (i.e. you can load it into any JavaScript environment).
 
 "use strict";
 
@@ -7363,12 +7790,29 @@ var Mark = (function () {
         if (!a[i].eq(b[i])) return false;
       }return true;
     }
+
+    // :: (?union<Mark, [Mark]>) → [Mark]
+    // Create a properly sorted mark set from null, a single mark, or an
+    // unsorted array of marks.
+  }, {
+    key: "setFrom",
+    value: function setFrom(marks) {
+      if (!marks || marks.length == 0) return empty;
+      if (marks instanceof Mark) return [marks];
+      var copy = marks.slice();
+      copy.sort(function (a, b) {
+        return a.type.rank - b.type.rank;
+      });
+      return copy;
+    }
   }]);
 
   return Mark;
 })();
 
 exports.Mark = Mark;
+
+var empty = [];
 
 },{}],28:[function(require,module,exports){
 "use strict";
@@ -7391,7 +7835,8 @@ var _mark = require("./mark");
 
 var _pos = require("./pos");
 
-var emptyArray = [];
+var emptyArray = [],
+    emptyAttrs = Object.create(null);
 
 // ;; This class represents a node in the tree that makes up a
 // ProseMirror document. So a document is an instance of `Node`, with
@@ -7518,7 +7963,7 @@ var Node = (function () {
   }, {
     key: "hasMarkup",
     value: function hasMarkup(type, attrs, marks) {
-      return this.type == type && Node.sameAttrs(this.attrs, attrs) && _mark.Mark.sameSet(this.marks, marks || emptyArray);
+      return this.type == type && Node.sameAttrs(this.attrs, attrs || emptyAttrs) && _mark.Mark.sameSet(this.marks, marks || emptyArray);
     }
   }, {
     key: "copy",
@@ -7864,9 +8309,7 @@ var Node = (function () {
     key: "sameAttrs",
     value: function sameAttrs(a, b) {
       if (a == b) return true;
-      var empty = isEmpty(a);
-      if (empty != isEmpty(b)) return false;
-      if (!empty) for (var prop in a) {
+      for (var prop in a) {
         if (a[prop] !== b[prop]) return false;
       }return true;
     }
@@ -7944,12 +8387,6 @@ function wrapMarks(marks, str) {
   for (var i = marks.length - 1; i >= 0; i--) {
     str = marks[i].type.name + "(" + str + ")";
   }return str;
-}
-
-function isEmpty(obj) {
-  if (obj) for (var _ in obj) {
-    return false;
-  }return true;
 }
 
 },{"./fragment":25,"./mark":27,"./pos":29}],29:[function(require,module,exports){
@@ -8241,7 +8678,7 @@ var NodeType = (function () {
     // :: Schema
     // A link back to the `Schema` the node type belongs to.
     this.schema = schema;
-    this.defaultAttrs = null;
+    this.defaultAttrs = getDefaultAttrs(attrs);
   }
 
   // :: Object<Attribute>
@@ -8318,8 +8755,7 @@ var NodeType = (function () {
   }, {
     key: "findConnection",
     value: function findConnection(other) {
-      // FIXME be more careful about order, and about chosen nodes
-      // having default attrs
+      // FIXME somehow define an order in which these are tried
       if (this.canContainType(other)) return [];
 
       var seen = Object.create(null);
@@ -8327,8 +8763,8 @@ var NodeType = (function () {
       while (active.length) {
         var current = active.shift();
         for (var _name in this.schema.nodes) {
-          var type = this.schema.nodeType(_name);
-          if (!(type.contains in seen) && current.from.canContainType(type)) {
+          var type = this.schema.nodes[_name];
+          if (type.defaultAttrs && !(type.contains in seen) && current.from.canContainType(type)) {
             var via = current.via.concat(type);
             if (type.canContainType(other)) return via;
             active.push({ from: type, via: via });
@@ -8353,7 +8789,7 @@ var NodeType = (function () {
   }, {
     key: "create",
     value: function create(attrs, content, marks) {
-      return new _node.Node(this, this.buildAttrs(attrs, content), _fragment.Fragment.from(content), marks);
+      return new _node.Node(this, this.buildAttrs(attrs, content), _fragment.Fragment.from(content), _mark.Mark.setFrom(marks));
     }
   }, {
     key: "createAutoFill",
@@ -8443,7 +8879,12 @@ var NodeType = (function () {
         var type = info.type || SchemaError.raise("Missing node type for " + _name2);
         findKinds(type, _name2, schema, info.kind);
         var contains = "contains" in info ? info.contains : type.contains;
-        result[_name2] = new type(_name2, contains, info.attributes || type.attributes, schema);
+        var attrs = type.attributes;
+        if (info.attributes) {
+          attrs = copyObj(attrs);
+          for (var aName in info.attributes) attrs[aName] = info.attributes[aName];
+        }
+        result[_name2] = new type(_name2, contains, attrs, schema);
       }
       for (var _name3 in result) {
         var contains = result[_name3].contains;
@@ -8452,21 +8893,18 @@ var NodeType = (function () {
       if (!result.doc) SchemaError.raise("Every schema needs a 'doc' type");
       if (!result.text) SchemaError.raise("Every schema needs a 'text' type");
 
-      for (var _name4 in types) {
-        types[_name4].defaultAttrs = getDefaultAttrs(types[_name4].attrs);
-      }return result;
+      return result;
     }
 
     // :: (string, *)
-    // Register a metadata element for this type. That is, add `value`
-    // to the array under the property name `name` on the type's
-    // prototype, creating the array if it wasn't already there. This is
-    // mostly used to attach things like commands and parsing strategies
-    // to node type.
+    // Register an element in this type's registry. That is, add `value`
+    // to the array associated with `name` in the registry stored in
+    // type's `prototype`. This is mostly used to attach things like
+    // commands and parsing strategies to node types. See `Schema.registry`.
   }, {
     key: "register",
     value: function register(name, value) {
-      ;(this.prototype[name] || (this.prototype[name] = [])).push(value);
+      var registry = this.prototype.hasOwnProperty("registry") ? this.prototype.registry : this.prototype.registry = Object.create(null);(registry[name] || (registry[name] = [])).push(value);
     }
   }, {
     key: "kind",
@@ -8639,38 +9077,53 @@ var Text = (function (_Inline) {
 
 exports.Text = Text;
 
-var Attribute =
-// :: (Object)
-// Create an attribute. `options` is an object containing the
-// settings for the attributes. The following settings are
-// supported:
-//
-// **`default`**: `?string`
-// : The default value for this attribute, to choose when no
-//   explicit value is provided.
-//
-// **`compute`**: `?(Fragment) → string`
-// : A function that computes a default value for the attribute from
-//   the node's content.
-//
-// Attributes that have no default or compute property must be
-// provided whenever a node or mark of a type that has them is
-// created.
-function Attribute() {
-  var options = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
+var Attribute = (function () {
+  // :: (Object)
+  // Create an attribute. `options` is an object containing the
+  // settings for the attributes. The following settings are
+  // supported:
+  //
+  // **`default`**: `?string`
+  // : The default value for this attribute, to choose when no
+  //   explicit value is provided.
+  //
+  // **`compute`**: `?(Fragment) → string`
+  // : A function that computes a default value for the attribute from
+  //   the node's content.
+  //
+  // Attributes that have no default or compute property must be
+  // provided whenever a node or mark of a type that has them is
+  // created.
 
-  _classCallCheck(this, Attribute);
+  function Attribute() {
+    var options = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
 
-  this["default"] = options["default"];
-  this.compute = options.compute;
-}
+    _classCallCheck(this, Attribute);
 
-// Marks
+    this["default"] = options["default"];
+    this.compute = options.compute;
+    this.registry = Object.create(null);
+  }
 
-// ;; Like nodes, marks (which are associated with nodes to signify
-// things like emphasis or being part of a link) are tagged with type
-// objects, which are instantiated once per `Schema`.
-;
+  // Marks
+
+  // ;; Like nodes, marks (which are associated with nodes to signify
+  // things like emphasis or being part of a link) are tagged with type
+  // objects, which are instantiated once per `Schema`.
+
+  // :: (string, *)
+  // Register a value in this attribute's registry. See
+  // `NodeType.register` and `Schema.registry`.
+
+  _createClass(Attribute, [{
+    key: "register",
+    value: function register(name, value) {
+      ;(this.registry[name] || (this.registry[name] = [])).push(value);
+    }
+  }]);
+
+  return Attribute;
+})();
 
 exports.Attribute = Attribute;
 
@@ -8733,16 +9186,12 @@ var MarkType = (function () {
         if (set[i].type == this) return set[i];
       }
     }
-
-    // :: (string, *)
-    // Register a metadata element for this mark type. Adds `value` to
-    // the array under the property name `name` on the type's prototype.
   }], [{
     key: "getOrder",
     value: function getOrder(marks) {
       var sorted = [];
-      for (var _name5 in marks) {
-        sorted.push({ name: _name5, rank: marks[_name5].type.rank });
+      for (var _name4 in marks) {
+        sorted.push({ name: _name4, rank: marks[_name4].type.rank });
       }sorted.sort(function (a, b) {
         return a.rank - b.rank;
       });
@@ -8756,17 +9205,12 @@ var MarkType = (function () {
     value: function compile(marks, schema) {
       var order = this.getOrder(marks);
       var result = Object.create(null);
-      for (var _name6 in marks) {
-        var info = marks[_name6];
+      for (var _name5 in marks) {
+        var info = marks[_name5];
         var attrs = info.attributes || info.type.attributes;
-        result[_name6] = new info.type(_name6, attrs, order[_name6], schema);
+        result[_name5] = new info.type(_name5, attrs, order[_name5], schema);
       }
       return result;
-    }
-  }, {
-    key: "register",
-    value: function register(name, value) {
-      ;(this.prototype[name] || (this.prototype[name] = [])).push(value);
     }
   }, {
     key: "rank",
@@ -8780,6 +9224,11 @@ var MarkType = (function () {
 
 exports.MarkType = MarkType;
 MarkType.attributes = {};
+
+// :: (string, *)
+// Register a metadata element for this mark type. See also
+// `NodeType.register`.
+MarkType.register = NodeType.register;
 
 // Schema specifications are data structures that specify a schema --
 // a set of node types, their names, attributes, and nesting behavior.
@@ -8797,14 +9246,14 @@ function ensureWrapped(obj) {
 
 function overlayObj(obj, overlay) {
   var copy = copyObj(obj);
-  for (var _name7 in overlay) {
-    var info = ensureWrapped(overlay[_name7]);
+  for (var _name6 in overlay) {
+    var info = ensureWrapped(overlay[_name6]);
     if (info == null) {
-      delete copy[_name7];
+      delete copy[_name6];
     } else if (info.type) {
-      copy[_name7] = info;
+      copy[_name6] = info;
     } else {
-      var existing = copy[_name7] = copyObj(copy[_name7]);
+      var existing = copy[_name6] = copyObj(copy[_name6]);
       for (var prop in info) {
         existing[prop] = info[prop];
       }
@@ -8812,8 +9261,6 @@ function overlayObj(obj, overlay) {
   }
   return copy;
 }
-
-// FIXME clean up handling of attributes, finish documentation.
 
 // ;; A schema specification is a blueprint for an actual
 // `Schema`. It maps names to node and mark types, along
@@ -8823,15 +9270,31 @@ function overlayObj(obj, overlay) {
 // A specification consists of an object that maps node names to node
 // type constructors and another similar object mapping mark names to
 // mark type constructors.
+//
+// For flexibility and reusability, node and mark type classes do not
+// declare their own name. Instead, each schema that includes them can
+// assign a name to them, as well as override their
+// [kind](#NodeType.kind) and [contained kind](#NodeType.contains), or
+// adding extra [attributes](#NodeType.attributes).
 
 var SchemaSpec = (function () {
   // :: (?Object<{type: NodeType}>, ?Object<{type: MarkType}>)
-
   // Create a schema specification from scratch. The arguments map
   // node names to node type constructors and mark names to mark type
   // constructors. Their property value should be either the type
   // constructors themselves, or objects with a type constructor under
-  // their `type` property, and optionally other properties.
+  // their `type` property, and optionally these other properties:
+  //
+  // **`contains`**`: string`
+  //   : Only valid for `nodes`. The [kind](#NodeType.kind) of the
+  //     nodes that this node can contain in this schema.
+  //
+  // **`kind`**`: string`
+  //  : Only valid for `nodes`. Overrides the kind of this node in
+  //    this schema. Same format as `NodeType.kind`.
+  //
+  // **`attributes`**`: Object<Attribute>`
+  //   : Extra attributes to attach to this node in this schema.
 
   function SchemaSpec(nodes, marks) {
     _classCallCheck(this, SchemaSpec);
@@ -8845,28 +9308,45 @@ var SchemaSpec = (function () {
   // object, and use it for all nodes that don't specify specific
   // attributes.
 
+  // :: (?Object<?{type: NodeType}>, ?Object<?{type: MarkType}>) → SchemaSpec
+  // Base a new schema spec on this one by specifying nodes and marks
+  // to add, change, or remove.
+  //
+  // When `nodes` is passed, it should be an object mapping type names
+  // to either `null`, to delete the type of that name, to a
+  // `NodeType`, to add or replace the node type of that name, or to
+  // an object containing [extension
+  // properties](#SchemaSpec_constructor), to add to the existing
+  // description of that node type.
+  //
+  // Similarly, `marks` can be an object to add, change, or remove
+  // marks in the schema.
+
   _createClass(SchemaSpec, [{
-    key: "updateNodes",
-    value: function updateNodes(nodes) {
-      return new SchemaSpec(overlayObj(this.nodes, nodes), this.marks);
+    key: "update",
+    value: function update(nodes, marks) {
+      return new SchemaSpec(nodes ? overlayObj(this.nodes, nodes) : this.nodes, marks ? overlayObj(this.marks, marks) : this.marks);
     }
+
+    // :: (?union<string, (name: string, type: NodeType) → bool>, string, Attribute) → SchemaSpec
+    // Create a new schema spec with attributes added to selected node
+    // types. `filter` can be `null`, to add the attribute to all node
+    // types, a string, to add it only to the named node type, or a
+    // predicate function, to add it to node types that pass the
+    // predicate.
+    //
+    // This attribute will be added alongside the node type's [default
+    // attributes](#NodeType.attributes).
   }, {
     key: "addAttribute",
-    value: function addAttribute(filter, attrName, attrInfo) {
+    value: function addAttribute(filter, attrName, attr) {
       var copy = copyObj(this.nodes);
-      for (var _name8 in copy) {
-        if (typeof filter == "string" ? filter == _name8 : typeof filter == "function" ? filter(_name8, copy[_name8]) : filter ? filter == copy[_name8] : true) {
-          var info = copy[_name8] = copyObj(copy[_name8]);
-          if (!info.attributes) info.attributes = copyObj(info.type.attributes);
-          info.attributes[attrName] = attrInfo;
+      for (var _name7 in copy) {
+        if (typeof filter == "string" ? filter == _name7 : typeof filter == "function" ? filter(_name7, copy[_name7]) : filter ? filter == copy[_name7] : true) {
+          var info = copy[_name7] = copyObj(copy[_name7]);(info.attributes || (info.attributes = Object.create(null)))[attrName] = attr;
         }
       }
       return new SchemaSpec(copy, this.marks);
-    }
-  }, {
-    key: "updateMarks",
-    value: function updateMarks(marks) {
-      return new SchemaSpec(this.nodes, overlayObj(this.marks, marks));
     }
   }]);
 
@@ -8886,13 +9366,13 @@ function getDefaultAttrs(attrs) {
 
 function _buildAttrs(attrSpec, attrs, arg1, arg2) {
   var built = Object.create(null);
-  for (var _name9 in attrSpec) {
-    var value = attrs && attrs[_name9];
+  for (var _name8 in attrSpec) {
+    var value = attrs && attrs[_name8];
     if (value == null) {
-      var attr = attrSpec[_name9];
-      if (attr["default"] != null) value = attr["default"];else if (attr.compute) value = attr.compute(arg1, arg2);else SchemaError.raise("No value supplied for attribute " + _name9);
+      var attr = attrSpec[_name8];
+      if (attr["default"] != null) value = attr["default"];else if (attr.compute) value = attr.compute(arg1, arg2);else SchemaError.raise("No value supplied for attribute " + _name8);
     }
-    built[_name9] = value;
+    built[_name8] = value;
   }
   return built;
 }
@@ -8930,8 +9410,6 @@ var Schema = (function () {
     this.markFromJSON = this.markFromJSON.bind(this);
   }
 
-  // FIXME normalize mark arrays passed to these methods
-
   // :: (union<string, NodeType>, ?Object, ?union<Fragment, Node, [Node]>, ?[Mark]) → Node
   // Create a node in this schema. The `type` may be a string or a
   // `NodeType` instance. Attributes will be extended
@@ -8958,7 +9436,7 @@ var Schema = (function () {
   }, {
     key: "text",
     value: function text(_text, marks) {
-      return this.nodes.text.create(null, _text, marks);
+      return this.nodes.text.create(null, _text, _mark.Mark.setFrom(marks));
     }
 
     // :: () → ?NodeType
@@ -8970,8 +9448,8 @@ var Schema = (function () {
     value: function defaultTextblockType() {
       var cached = this.cached.defaultTextblockType;
       if (cached !== undefined) return cached;
-      for (var _name10 in this.nodes) {
-        if (this.nodes[_name10].defaultTextblock) return this.cached.defaultTextblockType = this.nodes[_name10];
+      for (var _name9 in this.nodes) {
+        if (this.nodes[_name9].defaultTextblock) return this.cached.defaultTextblockType = this.nodes[_name9];
       }
       return this.cached.defaultTextblockType = null;
     }
@@ -9022,6 +9500,39 @@ var Schema = (function () {
         if (sub == sup) return true;
         sub = this.kinds[sub];
         if (!sub) return false;
+      }
+    }
+
+    // :: (string, (value: *, source: union<NodeType, MarkType, Attribute>))
+    // Retrieve all registered items under the given name from this
+    // schema. The given function will be called with each item and, as
+    // a second argument, the element—node type, mark type, or
+    // attribute—that it was associated with.
+  }, {
+    key: "registry",
+    value: function registry(name, f) {
+      var attrsSeen = [];
+      for (var i = 0; i < 2; i++) {
+        var obj = i ? this.marks : this.nodes;
+        for (var tname in obj) {
+          var type = obj[tname];
+          if (type.constructor.prototype.hasOwnProperty("registry")) {
+            var reg = type.registry[name];
+            if (reg) for (var j = 0; j < reg.length; j++) {
+              f(reg[j], type);
+            }
+          }
+          for (var aname in type.attrs) {
+            var attr = type.attrs[aname],
+                reg = attr.registry[name];
+            if (reg && attrsSeen.indexOf(attr) == -1) {
+              attrsSeen.push(attr);
+              for (var j = 0; j < reg.length; j++) {
+                f(reg[j], attr);
+              }
+            }
+          }
+        }
       }
     }
   }]);
@@ -9318,28 +9829,19 @@ function nodeInfo(schema) {
 function summarizeNodeInfo(schema) {
   var tags = Object.create(null);
   tags._ = [];
-  function read(type) {
-    var info = type.parseDOM;
-    if (!info) return;
-    info.forEach(function (info) {
-      var tag = info.tag || "_";
-      var parse = info.parse;
-      if (parse == "block") parse = function (dom, state) {
-        state.wrapIn(dom, this);
-      };else if (parse == "mark") parse = function (dom, state) {
-        state.wrapMark(dom, this);
-      };(tags[tag] || (tags[tag] = [])).push({
-        type: type, parse: parse,
-        rank: info.rank == null ? 50 : info.rank
-      });
+  schema.registry("parseDOM", function (info, type) {
+    var tag = info.tag || "_";
+    var parse = info.parse;
+    if (parse == "block") parse = function (dom, state) {
+      state.wrapIn(dom, this);
+    };else if (parse == "mark") parse = function (dom, state) {
+      state.wrapMark(dom, this);
+    };(tags[tag] || (tags[tag] = [])).push({
+      type: type, parse: parse,
+      rank: info.rank == null ? 50 : info.rank
     });
-  }
-
-  for (var _name2 in schema.nodes) {
-    read(schema.nodes[_name2]);
-  }for (var _name3 in schema.marks) {
-    read(schema.marks[_name3]);
-  }for (var tag in tags) {
+  });
+  for (var tag in tags) {
     tags[tag].sort(function (a, b) {
       return a.rank - b.rank;
     });
@@ -9733,7 +10235,7 @@ def(_model.BlockQuote, function (node, s) {
   return s.renderAs(node, "blockquote");
 });
 
-_model.BlockQuote.prototype.clicked = function (_, path, dom, coords) {
+_model.BlockQuote.prototype.countCoordsAsChild = function (_, path, dom, coords) {
   var childBox = dom.firstChild.getBoundingClientRect();
   if (coords.left < childBox.left - 2) return _model.Pos.from(path);
 };
@@ -9746,7 +10248,7 @@ def(_model.OrderedList, function (node, s) {
   return s.renderAs(node, "ol", { start: node.attrs.order != "1" && node.attrs.order });
 });
 
-_model.OrderedList.prototype.clicked = _model.BulletList.prototype.clicked = function (_, path, dom, coords) {
+_model.OrderedList.prototype.countCoordsAsChild = _model.BulletList.prototype.countCoordsAsChild = function (_, path, dom, coords) {
   for (var i = 0; i < dom.childNodes.length; i++) {
     var child = dom.childNodes[i];
     if (!child.hasAttribute("pm-offset")) continue;
@@ -10111,7 +10613,7 @@ _transform.Transform.prototype.lift = function (from) {
 
     for (var d = 0, pos = range.to;; d++) {
       if (pos.offset < this.doc.path(pos.path).size) {
-        this.split(pos, depth);
+        this.split(pos, depth - d);
         break;
       }
       if (d == depth - 1) break;
@@ -10233,6 +10735,9 @@ require("./replace");
 // document to position in the new document. Steps can be
 // [inverted](#Step.invert) to create a step that undoes their effect,
 // and chained together in a convenience object called a `Transform`.
+//
+// This module does not depend on the browser API being available
+// (i.e. you can load it into any JavaScript environment).
 //
 // These are the types of steps defined:
 var _transform = require("./transform");
@@ -11212,6 +11717,13 @@ _transform.Transform.prototype.insert = function (pos, content) {
 // existing content at that position.
 _transform.Transform.prototype.insertText = function (pos, text) {
   return this.insert(pos, this.doc.type.schema.text(text, this.doc.marksAt(pos)));
+};
+
+// :: (Pos, Node) → Transform
+// Insert the given node at `pos`, inheriting the marks of the
+// existing content at that position.
+_transform.Transform.prototype.insertInline = function (pos, node) {
+  return this.insert(pos, node.mark(this.doc.marksAt(pos)));
 };
 
 },{"../model":26,"./map":40,"./step":44,"./transform":45,"./tree":46}],43:[function(require,module,exports){

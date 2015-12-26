@@ -25,6 +25,7 @@ var where = document.getElementById('editor'),
         return footnotes;
     },
     getNodePos = (rootNode, searchedNode, searchedNumber) => {
+        console.log(searchedNumber);
         var hits = 0, foundNode;
 
         rootNode.inlineNodesBetween(null, null, function(inlineNode, path, start, end, parent) {
