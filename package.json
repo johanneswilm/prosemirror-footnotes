@@ -1,0 +1,28 @@
+{
+  "name": "prosemirror-footnotes",
+  "version": "0.0.1",
+  "description": "Install dependencies for ES6 compilation",
+  "scripts": {
+  },
+  "author": "Johannes Wilm",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "browserify": "*",
+    "babelify": "*",
+    "babel-preset-es2015": "*",
+    "prosemirror": "0.1.1"
+  },
+  "browserify": {
+    "transform": [
+      [
+        "babelify",
+        {
+          "presets": [
+            "es2015"
+          ]
+        }
+      ]
+    ]
+  }
+}
