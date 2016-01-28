@@ -24,11 +24,14 @@ import {
 }
 from "prosemirror/dist/dom"
 
-class Footnote extends Inline {}
-
-Footnote.attributes = {
-    fnContents: new Attribute("fnContents")
+class Footnote extends Inline {
+    get attrs() {
+        return {
+            fnContents: new Attribute("fnContents")
+        }
+    }
 }
+
 
 Footnote.register("parseDOM", {
     tag: "span",
@@ -38,7 +41,7 @@ Footnote.register("parseDOM", {
         if (!isFootnote) return false
         state.insert(this, {
             fnContents: dom.getAttribute('footnote-contents'),
-        }, null)
+        })
     }
 })
 
@@ -212,3 +215,7 @@ editor.on('transform', function(transform, object) {
 fnEditor.on('transform', function(transform, object) {
     updateFootnotes()
 })
+
+
+window.editor = editor
+window.fnEditor = fnEditor

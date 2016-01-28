@@ -50,12 +50,17 @@ var Footnote = function (_Inline) {
         return _possibleConstructorReturn(this, Object.getPrototypeOf(Footnote).apply(this, arguments));
     }
 
+    _createClass(Footnote, [{
+        key: "attrs",
+        get: function get() {
+            return {
+                fnContents: new _model.Attribute("fnContents")
+            };
+        }
+    }]);
+
     return Footnote;
 }(_model.Inline);
-
-Footnote.attributes = {
-    fnContents: new _model.Attribute("fnContents")
-};
 
 Footnote.register("parseDOM", {
     tag: "span",
@@ -65,7 +70,7 @@ Footnote.register("parseDOM", {
         if (!isFootnote) return false;
         state.insert(this, {
             fnContents: dom.getAttribute('footnote-contents')
-        }, null);
+        });
     }
 });
 
@@ -129,7 +134,7 @@ FootnoteContainer.register("parseDOM", {
     }
 });
 
-FootnoteContainer.prototype.serializeDOM = function (node, serializer, third, fourth) {
+FootnoteContainer.prototype.serializeDOM = function (node, serializer) {
     var dom = serializer.elt("div", {
         class: 'footnote-container'
     });
@@ -253,6 +258,9 @@ editor.on('transform', function (transform, object) {
 fnEditor.on('transform', function (transform, object) {
     updateFootnotes();
 });
+
+window.editor = editor;
+window.fnEditor = fnEditor;
 
 },{"prosemirror/dist/dom":3,"prosemirror/dist/edit/main":13,"prosemirror/dist/format":19,"prosemirror/dist/model":27}],2:[function(require,module,exports){
 (function(mod) {
